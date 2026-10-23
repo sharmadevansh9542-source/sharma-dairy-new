@@ -2,12 +2,17 @@
 
 ## Before production
 - Set a unique `DATABASE_URL`, `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_EMAIL`, and 14+ character random `BOOTSTRAP_ADMIN_PASSWORD` in the deployment environment; never commit `.env`.
+- Set a random `SESSION_SECRET` of at least 32 characters. Configure `RESEND_API_KEY` and `EMAIL_FROM` for password reset; the sender domain must be verified with Resend. Keep `.env.example` as a template only and put real values in the ignored `.env` or deployment secret store.
 - Use managed PostgreSQL TLS, least-privilege credentials, automated point-in-time recovery, and separate staging/production databases.
 - Run migrations from a controlled release job. Do not use `prisma migrate dev` against production.
 - Enable platform WAF/rate limits for login and password-reset endpoints; verify the deployed app has HTTPS and secure cookies.
 - Test role/tenant isolation, CSRF posture, duplicate submissions, race conditions, database restoration, and business reconciliation before accepting real transactions.
 - Set the business timezone in application settings and confirm it against the database and reporting requirements.
 - Establish retention rules for audit records and secure handling for farmer/customer contact details.
+
+## Password reset email
+
+Copy `.env.example` to `.env` for local development, then set `RESEND_API_KEY` and `EMAIL_FROM` using a verified Resend sender. Apply the Prisma migrations before testing password reset. Users need an active account with a registered email address. A reset code is valid for 10 minutes, allows at most five verification attempts, and is limited to one request per minute and five per hour per account. The request endpoint uses a generic response so it does not disclose whether an email is registered.
 
 ## Backup
 
