@@ -97,6 +97,7 @@ model User {
   createdSales    Sale[] @relation("SaleCreator")
   createdExpenses Expense[] @relation("ExpenseCreator")
   permissions     UserPermission[]
+  staffInvitations StaffInvitation[] @relation("StaffInviter")
 }
 
 model Session {
@@ -116,7 +117,6 @@ model PasswordResetToken {
   userId    String
   expiresAt DateTime
   usedAt    DateTime?
-  attempts  Int      @default(0)
   createdAt DateTime @default(now())
   @@index([userId, expiresAt])
 }
@@ -142,6 +142,8 @@ model FarmerProfile {
   address String?
   village String?
   animalType String?
+  fatherName String?
+  alternatePhone String?
   registrationDate DateTime @default(now())
   openingBalance Decimal @default(0) @db.Decimal(14, 2)
   isActive Boolean @default(true)
@@ -157,6 +159,7 @@ model CustomerProfile {
   customerCode String @unique
   userId String @unique
   address String?
+  alternatePhone String?
   category String @default("HOUSEHOLD")
   defaultMilkType MilkType @default(COW)
   defaultRate Decimal? @db.Decimal(10, 2)
@@ -177,8 +180,24 @@ model StaffProfile {
   employeeCode String @unique
   userId String @unique
   jobTitle String?
+  department String?
+  alternatePhone String?
   hiredAt DateTime @default(now())
   user User @relation(fields: [userId], references: [id])
+}
+
+model StaffInvitation {
+  id          String    @id @default(cuid())
+  email       String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  invitedById String
+  createdAt   DateTime  @default(now())
+  invitedBy   User      @relation("StaffInviter", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([tokenHash])
 }
 
 model MilkTypeConfig {

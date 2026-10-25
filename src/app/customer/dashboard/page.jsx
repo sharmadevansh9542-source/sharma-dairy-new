@@ -1,3 +1,98 @@
-import {redirect} from 'next/navigation';import {getSessionUser} from '@/lib/auth/session';import {prisma} from '@/lib/db/prisma';
-export default async function CustomerDashboard(){const user=await getSessionUser();if(!user)redirect('/login');if(user.role!=='CUSTOMER')redirect('/dashboard');const profile=await prisma.customerProfile.findUnique({where:{userId:user.id}});if(!profile)return <main className="p-8">Customer profile is not linked. Contact Sharma Dairy administrator.</main>;const [sales,payments,charges,received]=await Promise.all([prisma.sale.findMany({where:{customerId:profile.id},take:100,orderBy:{saleAt:'desc'},include:{milkType:true}}),prisma.customerPayment.findMany({where:{customerId:profile.id},take:100,orderBy:{paidAt:'desc'}}),prisma.sale.aggregate({where:{customerId:profile.id,status:{not:'CANCELLED'}},_sum:{amount:true}}),prisma.customerPayment.aggregate({where:{customerId:profile.id},_sum:{amount:true}})]);return <main className="min-h-screen p-4 md:p-8"><header className="mb-8 flex justify-between"><div><p className="text-sm text-green-800">Sharma Dairy · Customer Portal</p><h1 className="mt-1 text-3xl font-bold">Welcome, {user.fullName}</h1><p className="mt-2 text-slate-500">Your deliveries, bills and payment history.</p></div><form action="/api/auth/logout" method="post"><button className="rounded-xl border px-4 py-2">Sign out</button></form></header><div className="grid gap-4 sm:grid-cols-3"><Card label="Deliveries / sales" value={sales.length}/><Card label="Total billed" value={`₹${Number(charges._sum.amount||0).toLocaleString('en-IN')}`}/><Card label="Payments received" value={`₹${Number(received._sum.amount||0).toLocaleString('en-IN')}`}/></div><section className="mt-7 rounded-2xl border bg-white p-4"><h2 className="mb-4 font-bold">My deliveries and sales</h2><div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead><tr className="text-slate-500"><th className="p-2">Date</th><th className="p-2">Milk</th><th className="p-2">Quantity</th><th className="p-2">Rate</th><th className="p-2">Amount</th><th className="p-2">Status</th></tr></thead><tbody>{sales.map(s=><tr key={s.id} className="border-t"><td className="p-2">{s.saleAt.toLocaleDateString('en-IN')}</td><td className="p-2">{s.milkType.label}</td><td className="p-2">{s.quantityLitres.toString()} L</td><td className="p-2">₹{s.ratePerLitre.toString()}</td><td className="p-2">₹{s.amount.toString()}</td><td className="p-2">{s.status}</td></tr>)}</tbody></table>{!sales.length&&<p className="p-4 text-slate-500">No sales or deliveries recorded yet.</p>}</div></section><section className="mt-5 rounded-2xl border bg-white p-4"><h2 className="mb-3 font-bold">My payments</h2>{payments.map(p=><p key={p.id} className="border-t py-3 text-sm">{p.paidAt.toLocaleDateString('en-IN')} · {p.method} · ₹{p.amount.toString()}</p>)}{!payments.length&&<p className="text-sm text-slate-500">No payments recorded yet.</p>}</section></main>}
-function Card({label,value}){return <article className="rounded-2xl border bg-white p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-2xl font-bold">{value}</p></article>}
+import { redirect } from 'next/navigation';
+import { getSessionUser } from '@/lib/auth/session';
+import { prisma } from '@/lib/db/prisma';
+import CustomerDashboardView from '@/components/customer-dashboard-view';
+
+export default async function CustomerDashboard() {
+  const user = await getSessionUser();
+  if (!user) redirect('/login');
+  if (user.role !== 'CUSTOMER') redirect('/dashboard');
+
+  const profile = await prisma.customerProfile.findUnique({
+    where: { userId: user.id },
+  });
+
+  if (!profile) {
+    return (
+      <main className="min-h-screen p-8 bg-slate-50 flex items-center justify-center">
+        <div className="rounded-2xl border bg-white p-8 max-w-md text-center shadow-sm">
+          <h1 className="text-xl font-bold text-red-600">Customer Profile Not Linked</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Your login account exists, but no customer profile is linked. Please contact Sharma Dairy administrator.
+          </p>
+          <form action="/api/auth/logout" method="post" className="mt-6">
+            <button className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white">
+              Sign out
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  // Fetch only this customer's private data
+  const [sales, payments, charges, received] = await Promise.all([
+    prisma.sale.findMany({
+      where: { customerId: profile.id },
+      take: 200,
+      orderBy: { saleAt: 'desc' },
+      include: { milkType: true },
+    }),
+    prisma.customerPayment.findMany({
+      where: { customerId: profile.id },
+      take: 200,
+      orderBy: { paidAt: 'desc' },
+    }),
+    prisma.sale.aggregate({
+      where: { customerId: profile.id, status: { not: 'CANCELLED' } },
+      _sum: { amount: true },
+    }),
+    prisma.customerPayment.aggregate({
+      where: { customerId: profile.id },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const serializedSales = sales.map((s) => ({
+    ...s,
+    quantityLitres: Number(s.quantityLitres),
+    ratePerLitre: Number(s.ratePerLitre),
+    amount: Number(s.amount),
+    saleAt: s.saleAt.toISOString(),
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+  }));
+
+  const serializedPayments = payments.map((p) => ({
+    ...p,
+    amount: Number(p.amount),
+    paidAt: p.paidAt.toISOString(),
+    createdAt: p.createdAt.toISOString(),
+  }));
+
+  return (
+    <CustomerDashboardView
+      user={{
+        id: user.id,
+        fullName: user.fullName,
+        phone: user.phone,
+        email: user.email,
+        role: user.role,
+      }}
+      profile={{
+        id: profile.id,
+        customerCode: profile.customerCode,
+        address: profile.address,
+        category: profile.category,
+        defaultMilkType: profile.defaultMilkType,
+        defaultRate: profile.defaultRate != null ? Number(profile.defaultRate) : null,
+        dailyRequirement: profile.dailyRequirement != null ? Number(profile.dailyRequirement) : null,
+        billingCycle: profile.billingCycle,
+      }}
+      sales={serializedSales}
+      payments={serializedPayments}
+      totalBilled={Number(charges._sum.amount || 0)}
+      totalPaid={Number(received._sum.amount || 0)}
+    />
+  );
+}

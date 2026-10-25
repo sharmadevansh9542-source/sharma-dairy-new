@@ -13,10 +13,10 @@ export async function POST(request) {
     const user = await prisma.user.findFirst({ where: { email: normalizedEmail, isActive: true }, select: { id: true } });
     if (!user) return NextResponse.json({ error: 'The code or email is invalid.' }, { status: 400 });
     const token = await prisma.passwordResetToken.findFirst({ where: { userId: user.id, usedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' } });
-    if (!token || token.attempts >= 5) return NextResponse.json({ error: 'The code is invalid or expired. Request a new one.' }, { status: 400 });
+    if (!token) return NextResponse.json({ error: 'The code is invalid or expired. Request a new one.' }, { status: 400 });
     if (!(await bcrypt.compare(String(otp), token.tokenHash))) {
-      await prisma.passwordResetToken.update({ where: { id: token.id }, data: { attempts: { increment: 1 }, ...(token.attempts + 1 >= 5 ? { usedAt: new Date() } : {}) } });
-      return NextResponse.json({ error: 'The code is invalid or expired.' }, { status: 400 });
+      await prisma.passwordResetToken.update({ where: { id: token.id }, data: { usedAt: new Date() } });
+      return NextResponse.json({ error: 'The code is invalid or expired. Request a new one.' }, { status: 400 });
     }
     const passwordHash = await bcrypt.hash(password, 12);
     await prisma.$transaction([

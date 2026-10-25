@@ -1,2 +1,67 @@
-import {redirect} from 'next/navigation';import {getSessionUser} from '@/lib/auth/session';import Link from 'next/link';import {Milk,ShoppingCart,Wallet,ChartNoAxesCombined} from 'lucide-react';
-export default async function StaffDashboard(){const user=await getSessionUser();if(!user)redirect('/login');if(user.role!=='STAFF')redirect('/dashboard');const links=[['/admin/collections','Milk collection','Record shift-wise milk intake',Milk],['/admin/sales','Sales and delivery','Record customer sales',ShoppingCart],['/admin/farmer-payments','Payments','Payment entry if permitted',Wallet],['/admin/reports','Reports','Operational summaries if permitted',ChartNoAxesCombined]];return <main className="min-h-screen p-5 md:p-10"><header className="flex justify-between"><div><p className="text-sm text-green-800">Sharma Dairy · Staff workspace</p><h1 className="mt-2 text-3xl font-bold">Hello, {user.fullName}</h1><p className="mt-2 text-slate-500">Choose a work area. Each operation is checked by the server.</p></div><form action="/api/auth/logout" method="post"><button className="rounded-xl border px-4 py-2">Sign out</button></form></header><div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{links.map(([href,title,desc,Icon])=><Link key={href} href={href} className="rounded-2xl border bg-white p-5 transition hover:border-green-500"><Icon className="mb-5 text-green-800" size={28}/><h2 className="font-bold">{title}</h2><p className="mt-2 text-sm text-slate-500">{desc}</p></Link>)}</div></main>}
+import { redirect } from 'next/navigation';
+import { getSessionUser } from '@/lib/auth/session';
+import { prisma } from '@/lib/db/prisma';
+import StaffDashboardView from '@/components/staff-dashboard-view';
+
+export default async function StaffDashboard() {
+  const user = await getSessionUser();
+  if (!user) redirect('/login');
+  if (user.role !== 'STAFF') redirect('/dashboard');
+
+  const profile = await prisma.staffProfile.findUnique({
+    where: { userId: user.id },
+  });
+
+  const permissions = await prisma.userPermission.findMany({
+    where: { userId: user.id },
+    include: { permission: true },
+  });
+
+  const permissionKeys = permissions.map((p) => p.permission.key);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const [collectionsToday, salesToday] = await Promise.all([
+    prisma.milkCollection.aggregate({
+      where: {
+        collectionAt: { gte: today, lt: tomorrow },
+      },
+      _count: { id: true },
+      _sum: { quantityLitres: true },
+    }),
+    prisma.sale.aggregate({
+      where: {
+        saleAt: { gte: today, lt: tomorrow },
+        status: { not: 'CANCELLED' },
+      },
+      _count: { id: true },
+      _sum: { quantityLitres: true },
+    }),
+  ]);
+
+  return (
+    <StaffDashboardView
+      user={{
+        id: user.id,
+        fullName: user.fullName,
+        phone: user.phone,
+        email: user.email,
+        role: user.role,
+      }}
+      profile={{
+        id: profile?.id || '',
+        employeeCode: profile?.employeeCode || 'STAFF',
+        jobTitle: profile?.jobTitle || 'Staff Member',
+        department: profile?.department || 'Operations',
+      }}
+      userPermissions={permissionKeys}
+      todayCollectionsCount={collectionsToday._count.id || 0}
+      todayCollectionsLitres={Number(collectionsToday._sum.quantityLitres || 0)}
+      todaySalesCount={salesToday._count.id || 0}
+      todaySalesLitres={Number(salesToday._sum.quantityLitres || 0)}
+    />
+  );
+}

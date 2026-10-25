@@ -1,1 +1,2 @@
-ALTER TABLE "PasswordResetToken" ADD COLUMN "attempts" INTEGER NOT NULL DEFAULT 0;
+-- Password-reset tokens are single-use. Failed verification also consumes the token,
+-- which limits an issued code to one online guess; request rate limits cap new codes.

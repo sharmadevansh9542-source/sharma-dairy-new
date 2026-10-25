@@ -1,3 +1,105 @@
-import {redirect} from 'next/navigation';import {getSessionUser} from '@/lib/auth/session';import {prisma} from '@/lib/db/prisma';import Link from 'next/link';
-export default async function FarmerDashboard(){const user=await getSessionUser();if(!user)redirect('/login');if(user.role!=='FARMER')redirect('/dashboard');const profile=await prisma.farmerProfile.findUnique({where:{userId:user.id}});if(!profile)return <main className="p-8">Farmer profile is not linked. Contact Sharma Dairy administrator.</main>;const [collections,payments,ledger]=await Promise.all([prisma.milkCollection.findMany({where:{farmerId:profile.id},take:100,orderBy:{collectionAt:'desc'},include:{milkType:true}}),prisma.farmerPayment.findMany({where:{farmerId:profile.id},take:100,orderBy:{paidAt:'desc'}}),prisma.ledgerEntry.aggregate({where:{farmerId:profile.id},_sum:{amount:true}})]);const today=new Date();today.setHours(0,0,0,0);const todays=collections.filter(c=>c.collectionAt>=today);return <main className="min-h-screen p-4 md:p-8"><header className="mb-8 flex justify-between"><div><p className="text-sm text-green-800">Sharma Dairy · Farmer Portal</p><h1 className="mt-1 text-3xl font-bold">Namaste, {user.fullName}</h1><p className="mt-2 text-slate-500">Your personal milk collection and payment information.</p></div><form action="/api/auth/logout" method="post"><button className="rounded-xl border px-4 py-2">Sign out</button></form></header><div className="grid gap-4 sm:grid-cols-3"><Card label="Today's collection" value={`${todays.reduce((a,c)=>a+Number(c.quantityLitres),0).toFixed(3)} L`}/><Card label="Total collection records" value={collections.length}/><Card label="Ledger net (informational)" value={`₹${Number(ledger._sum.amount||0).toLocaleString('en-IN')}`}/></div><section className="mt-7 rounded-2xl border bg-white p-4"><h2 className="mb-4 font-bold">My collection history</h2><div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead><tr className="text-slate-500"><th className="p-2">Date</th><th className="p-2">Shift</th><th className="p-2">Milk</th><th className="p-2">Litres</th><th className="p-2">Fat/SNF</th><th className="p-2">Rate</th><th className="p-2">Amount</th></tr></thead><tbody>{collections.map(c=><tr key={c.id} className="border-t"><td className="p-2">{c.collectionAt.toLocaleString('en-IN')}</td><td className="p-2">{c.shift}</td><td className="p-2">{c.milkType.label}</td><td className="p-2">{c.quantityLitres.toString()}</td><td className="p-2">{c.fatPercent??'—'} / {c.snfPercent??'—'}</td><td className="p-2">₹{c.ratePerLitre.toString()}</td><td className="p-2">₹{c.amount.toString()}</td></tr>)}</tbody></table>{!collections.length&&<p className="p-4 text-slate-500">No collections recorded yet.</p>}</div></section><section className="mt-5 rounded-2xl border bg-white p-4"><h2 className="mb-3 font-bold">My payments</h2>{payments.map(p=><p key={p.id} className="border-t py-3 text-sm">{p.paidAt.toLocaleDateString('en-IN')} · {p.method} · ₹{p.amount.toString()} · {p.paymentCode}</p>)}{!payments.length&&<p className="text-sm text-slate-500">No payments recorded yet.</p>}</section></main>}
-function Card({label,value}){return <article className="rounded-2xl border bg-white p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-2xl font-bold">{value}</p></article>}
+import { redirect } from 'next/navigation';
+import { getSessionUser } from '@/lib/auth/session';
+import { prisma } from '@/lib/db/prisma';
+import FarmerDashboardView from '@/components/farmer-dashboard-view';
+
+export default async function FarmerDashboard() {
+  const user = await getSessionUser();
+  if (!user) redirect('/login');
+  if (user.role !== 'FARMER') redirect('/dashboard');
+
+  const profile = await prisma.farmerProfile.findUnique({
+    where: { userId: user.id },
+  });
+
+  if (!profile) {
+    return (
+      <main className="min-h-screen p-8 bg-slate-50 flex items-center justify-center">
+        <div className="rounded-2xl border bg-white p-8 max-w-md text-center shadow-sm">
+          <h1 className="text-xl font-bold text-red-600">Farmer Profile Not Linked</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Your login account exists, but no farmer profile is linked. Please contact Sharma Dairy administrator.
+          </p>
+          <form action="/api/auth/logout" method="post" className="mt-6">
+            <button className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white">
+              Sign out
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  // Fetch only this farmer's private data
+  const [collections, payments, ledgerSum, latestRate] = await Promise.all([
+    prisma.milkCollection.findMany({
+      where: { farmerId: profile.id },
+      take: 200,
+      orderBy: { collectionAt: 'desc' },
+      include: { milkType: true },
+    }),
+    prisma.farmerPayment.findMany({
+      where: { farmerId: profile.id },
+      take: 200,
+      orderBy: { paidAt: 'desc' },
+    }),
+    prisma.ledgerEntry.aggregate({
+      where: { farmerId: profile.id },
+      _sum: { amount: true },
+    }),
+    prisma.milkRate.findFirst({
+      orderBy: { effectiveFrom: 'desc' },
+    }),
+  ]);
+
+  // Convert Decimals/Dates for serialization to client component
+  const serializedCollections = collections.map((c) => ({
+    ...c,
+    quantityLitres: Number(c.quantityLitres),
+    ratePerLitre: Number(c.ratePerLitre),
+    amount: Number(c.amount),
+    fatPercent: c.fatPercent != null ? Number(c.fatPercent) : null,
+    snfPercent: c.snfPercent != null ? Number(c.snfPercent) : null,
+    collectionAt: c.collectionAt.toISOString(),
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+  }));
+
+  const serializedPayments = payments.map((p) => ({
+    ...p,
+    amount: Number(p.amount),
+    paidAt: p.paidAt.toISOString(),
+    createdAt: p.createdAt.toISOString(),
+  }));
+
+  const serializedRate = latestRate
+    ? {
+        ...latestRate,
+        fixedRate: latestRate.fixedRate != null ? Number(latestRate.fixedRate) : null,
+      }
+    : null;
+
+  return (
+    <FarmerDashboardView
+      user={{
+        id: user.id,
+        fullName: user.fullName,
+        phone: user.phone,
+        email: user.email,
+        role: user.role,
+      }}
+      profile={{
+        id: profile.id,
+        farmerCode: profile.farmerCode,
+        village: profile.village,
+        address: profile.address,
+        animalType: profile.animalType,
+        fatherName: profile.fatherName,
+      }}
+      collections={serializedCollections}
+      payments={serializedPayments}
+      ledgerSum={Number(ledgerSum._sum.amount || 0)}
+      currentRate={serializedRate}
+    />
+  );
+}
