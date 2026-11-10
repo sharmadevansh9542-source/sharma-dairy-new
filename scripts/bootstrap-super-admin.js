@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 try {
   const name = process.env.SUPER_ADMIN_NAME || 'Platform Super Admin';
   const email = (process.env.SUPER_ADMIN_EMAIL || 'superadmin@sharmadairy.com').toLowerCase();
-  const password = process.env.SUPER_ADMIN_PASSWORD || 'SuperSecret@Sharma2026!';
+  const password = process.env.SUPER_ADMIN_PASSWORD || 'Super@Sharma2026';
 
   if (!password || password.length < 14) {
     throw new Error('Super Admin password must be at least 14 characters long.');
