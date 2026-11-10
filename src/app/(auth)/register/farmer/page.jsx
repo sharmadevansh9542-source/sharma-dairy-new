@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -16,12 +16,15 @@ import {
   Phone,
   User,
   Lock,
+  Building2,
 } from 'lucide-react';
 
 export default function FarmerRegistrationPage() {
   const router = useRouter();
 
+  const [dairies, setDairies] = useState([]);
   const [formData, setFormData] = useState({
+    dairyCode: 'SHARMA',
     fullName: '',
     phone: '',
     email: '',
@@ -34,6 +37,25 @@ export default function FarmerRegistrationPage() {
     confirmPassword: '',
     terms: false,
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const codeParam = params.get('dairy');
+    if (codeParam) {
+      setFormData((prev) => ({ ...prev, dairyCode: codeParam.toUpperCase() }));
+    }
+    fetch('/api/dairies/public')
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.data && j.data.length > 0) {
+          setDairies(j.data);
+          if (!codeParam && !j.data.some((d) => d.code === 'SHARMA')) {
+            setFormData((prev) => ({ ...prev, dairyCode: j.data[0].code }));
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -168,6 +190,31 @@ export default function FarmerRegistrationPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Section 0: Dairy Tenant Selection */}
+                <div className="rounded-2xl border border-green-200 bg-green-50/60 p-4">
+                  <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-green-900 mb-2">
+                    <Building2 size={15} className="text-green-800" />
+                    Select Your Associated Dairy Business <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="dairyCode"
+                    required
+                    value={formData.dairyCode}
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-green-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none focus:border-green-800 focus:ring-2 focus:ring-green-100"
+                  >
+                    {dairies.length > 0 ? (
+                      dairies.map((d) => (
+                        <option key={d.id} value={d.code}>
+                          {d.name} ({d.code}) {d.city ? `— ${d.city}` : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="SHARMA">Sharma Dairy (SHARMA)</option>
+                    )}
+                  </select>
+                </div>
 
                 {/* Section 1: Personal Details */}
                 <div>

@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { randomBytes, createHash } from 'node:crypto';
 import { prisma } from '@/lib/db/prisma';
-import { apiUser, audit } from '@/lib/auth/guard';
+import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
 import { staffInviteSchema } from '@/lib/validation/auth';
 
 export const runtime = 'nodejs';
 
 export async function POST(request) {
   try {
-    const { user, response } = await apiUser(['ADMIN']);
+    const { context, response } = await apiTenantUser(['ADMIN']);
     if (response) return response;
 
     const body = await request.json();
@@ -34,9 +34,10 @@ export async function POST(request) {
       );
     }
 
-    // Check if an active, unused invitation already exists for this email
+    // Check if an active, unused invitation already exists for this email within this dairy
     const existingInvite = await prisma.staffInvitation.findFirst({
       where: {
+        dairyId: context.dairyId,
         email,
         usedAt: null,
         expiresAt: { gt: new Date() },
@@ -44,7 +45,6 @@ export async function POST(request) {
     });
 
     if (existingInvite) {
-      // Invalidate the older pending invitation so the new one takes precedence
       await prisma.staffInvitation.delete({ where: { id: existingInvite.id } });
     }
 
@@ -54,15 +54,17 @@ export async function POST(request) {
 
     const invitation = await prisma.staffInvitation.create({
       data: {
+        dairyId: context.dairyId,
         email,
         tokenHash,
         expiresAt,
-        invitedById: user.id,
+        invitedById: context.user.id,
       },
     });
 
-    await audit({
-      actorId: user.id,
+    await tenantAudit({
+      actorId: context.user.id,
+      dairyId: context.dairyId,
       action: 'CREATE_STAFF_INVITATION',
       entityType: 'StaffInvitation',
       entityId: invitation.id,

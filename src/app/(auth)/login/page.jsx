@@ -34,6 +34,7 @@ export default function LoginPage() {
 function LoginForm() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -52,7 +53,7 @@ function LoginForm() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
+        body: JSON.stringify({ identifier, password, rememberMe }),
       });
 
       const data = response.headers.get('content-type')?.includes('application/json')
@@ -190,6 +191,18 @@ function LoginForm() {
                 </div>
               </div>
 
+              <div className="flex items-center justify-between pt-1">
+                <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-green-800"
+                  />
+                  Remember session for 30 days
+                </label>
+              </div>
+
               {error && (
                 <div role="alert" className="rounded-xl bg-red-50 border border-red-200 p-3.5 text-sm text-red-700 font-medium">
                   {error}
@@ -239,8 +252,12 @@ function LoginForm() {
               </Link>
             </div>
 
-            <p className="mt-4 text-center text-xs text-slate-400">
-              Admin registration is strictly protected and managed internally.
+            <p className="mt-4 text-center text-xs text-slate-500">
+              Own a dairy business?{' '}
+              <Link href="/register-dairy" className="font-bold text-green-800 hover:underline">
+                Register your dairy tenant
+              </Link>
+              {' '}· Super Admin creation is restricted.
             </p>
           </div>
         </section>

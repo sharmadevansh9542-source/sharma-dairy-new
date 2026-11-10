@@ -48,6 +48,7 @@ export default async function FarmerDashboard() {
       _sum: { amount: true },
     }),
     prisma.milkRate.findFirst({
+      where: { dairyId: profile.dairyId || undefined },
       orderBy: { effectiveFrom: 'desc' },
     }),
   ]);

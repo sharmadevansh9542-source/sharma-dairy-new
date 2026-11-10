@@ -18,10 +18,37 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
+const MANAGER_PRESETS = {
+  STAFF: { label: 'Operations Staff', perms: ['collection.create', 'sale.create'] },
+  COLLECTION_MANAGER: { label: 'Collection Manager', perms: ['collection.create', 'reports.view'] },
+  SALES_MANAGER: { label: 'Sales Manager', perms: ['sale.create', 'subscriptions.manage', 'reports.view'] },
+  ACCOUNTS_MANAGER: { label: 'Accounts Manager', perms: ['payment.record', 'expense.create', 'accounting.view', 'reports.view'] },
+  INVENTORY_MANAGER: { label: 'Inventory Manager', perms: ['stock.adjust', 'products.manage', 'reports.view'] },
+  DELIVERY_MANAGER: { label: 'Delivery Manager', perms: ['subscriptions.manage', 'sale.create'] },
+};
+
+const PERMISSION_LABELS = [
+  ['collection.create', 'Milk Collection (Add / View)'],
+  ['sale.create', 'Milk & Product Sales'],
+  ['payment.record', 'Farmer & Customer Payments'],
+  ['expense.create', 'Operating Expenses'],
+  ['stock.adjust', 'Raw Milk Stock Adjustments'],
+  ['subscriptions.manage', 'Customer Subscriptions & Delivery'],
+  ['products.manage', 'Packaged Products & Purchases'],
+  ['accounting.view', 'Accounting, Cashbook & Bankbook'],
+  ['reports.view', 'Financial & Business Reports'],
+];
+
 export default function AdminStaffManager({ initialStaff = [], initialInvitations = [] }) {
   const [activeTab, setActiveTab] = useState('staff'); // 'staff' | 'invite' | 'invitations'
   const [staffList, setStaffList] = useState(initialStaff);
   const [invitations, setInvitations] = useState(initialInvitations);
+
+  // Permission modal state
+  const [editingStaff, setEditingStaff] = useState(null);
+  const [editManagerRole, setEditManagerRole] = useState('STAFF');
+  const [editPerms, setEditPerms] = useState([]);
+  const [permBusy, setPermBusy] = useState(false);
 
   // Invite form state
   const [inviteEmail, setInviteEmail] = useState('');
@@ -115,6 +142,51 @@ export default function AdminStaffManager({ initialStaff = [], initialInvitation
       alert(err.message || 'Failed to update staff status.');
     } finally {
       setStatusTogglingId(null);
+    }
+  }
+
+  function openPermissionsModal(staff) {
+    setEditingStaff(staff);
+    setEditManagerRole(staff.staffProfile?.managerRole || 'STAFF');
+    setEditPerms(staff.permissionKeys || []);
+  }
+
+  async function savePermissions(e) {
+    e.preventDefault();
+    if (!editingStaff) return;
+    setPermBusy(true);
+    try {
+      const res = await fetch(`/api/admin/staff/${editingStaff.id}/permissions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          managerRole: editManagerRole,
+          jobTitle: MANAGER_PRESETS[editManagerRole]?.label || 'Staff Member',
+          permissionKeys: editPerms,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to update permissions');
+      setStaffList((prev) =>
+        prev.map((s) =>
+          s.id === editingStaff.id
+            ? {
+                ...s,
+                permissionKeys: json.permissionKeys,
+                staffProfile: {
+                  ...s.staffProfile,
+                  managerRole: json.managerRole,
+                  jobTitle: MANAGER_PRESETS[editManagerRole]?.label || s.staffProfile?.jobTitle,
+                },
+              }
+            : s
+        )
+      );
+      setEditingStaff(null);
+    } catch (err) {
+      alert(err.message || 'Unable to save permissions');
+    } finally {
+      setPermBusy(false);
     }
   }
 
@@ -249,11 +321,17 @@ export default function AdminStaffManager({ initialStaff = [], initialInvitation
                         </span>
                       )}
                     </td>
-                    <td className="p-3.5 text-right">
+                    <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
+                      <button
+                        onClick={() => openPermissionsModal(staff)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        Roles & Permissions
+                      </button>
                       <button
                         onClick={() => handleToggleStatus(staff.id, staff.isActive)}
                         disabled={statusTogglingId === staff.id}
-                        className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                        className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
                           staff.isActive
                             ? 'border border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
                             : 'border border-green-200 bg-green-50 text-green-800 hover:bg-green-100'
@@ -447,6 +525,87 @@ export default function AdminStaffManager({ initialStaff = [], initialInvitation
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Manager Role & Granular Permissions Modal */}
+      {editingStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+            <h3 className="text-base font-bold text-slate-900">
+              Assign Manager Role & Permissions — {editingStaff.fullName}
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Select a manager preset or customize module-level permissions enforced by server-side guards.
+            </p>
+            <form onSubmit={savePermissions} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Manager Designation</label>
+                <select
+                  value={editManagerRole}
+                  onChange={(e) => {
+                    const roleKey = e.target.value;
+                    setEditManagerRole(roleKey);
+                    if (MANAGER_PRESETS[roleKey]) {
+                      setEditPerms(MANAGER_PRESETS[roleKey].perms);
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs font-semibold"
+                >
+                  {Object.entries(MANAGER_PRESETS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-600 mb-2">Module Permissions</label>
+                <div className="grid sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto p-1">
+                  {PERMISSION_LABELS.map(([key, label]) => {
+                    const checked = editPerms.includes(key);
+                    return (
+                      <label
+                        key={key}
+                        className={`flex items-center gap-2 rounded-xl border p-2.5 text-xs cursor-pointer ${
+                          checked ? 'border-green-300 bg-green-50 text-green-900 font-semibold' : 'border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) setEditPerms([...editPerms, key]);
+                            else setEditPerms(editPerms.filter((p) => p !== key));
+                          }}
+                          className="h-4 w-4 rounded text-green-800"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingStaff(null)}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={permBusy}
+                  className="rounded-xl bg-green-800 px-5 py-2 text-xs font-bold text-white hover:bg-green-900 disabled:opacity-50"
+                >
+                  {permBusy ? 'Saving...' : 'Save Permissions'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

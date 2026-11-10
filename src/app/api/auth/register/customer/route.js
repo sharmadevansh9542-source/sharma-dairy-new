@@ -35,6 +35,24 @@ export async function POST(request) {
     const normalizedPhone = data.phone.trim().replace(/[^0-9]/g, '');
     const normalizedEmail = data.email && data.email.trim() ? data.email.trim().toLowerCase() : null;
 
+    // Resolve tenant dairy
+    let dairy = null;
+    if (data.dairyCode) {
+      dairy = await prisma.dairy.findUnique({ where: { code: data.dairyCode.trim().toUpperCase() } });
+    } else if (data.dairyId) {
+      dairy = await prisma.dairy.findUnique({ where: { id: data.dairyId } });
+    } else {
+      dairy = await prisma.dairy.findFirst({ where: { status: 'APPROVED' }, orderBy: { createdAt: 'asc' } });
+    }
+
+    if (!dairy) {
+      return NextResponse.json({ error: 'A valid active dairy is required for customer registration.' }, { status: 400 });
+    }
+
+    if (dairy.status === 'SUSPENDED') {
+      return NextResponse.json({ error: 'This dairy business is currently suspended from accepting new registrations.' }, { status: 403 });
+    }
+
     // Check duplicate phone or email
     const existing = await prisma.user.findFirst({
       where: {
@@ -60,6 +78,7 @@ export async function POST(request) {
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
+          dairyId: dairy.id,
           fullName: data.fullName,
           phone: normalizedPhone,
           email: normalizedEmail,
@@ -71,6 +90,7 @@ export async function POST(request) {
 
       const profile = await tx.customerProfile.create({
         data: {
+          dairyId: dairy.id,
           customerCode,
           userId: user.id,
           address: data.address,
@@ -80,8 +100,19 @@ export async function POST(request) {
         },
       });
 
+      await tx.dairyMembership.create({
+        data: {
+          dairyId: dairy.id,
+          userId: user.id,
+          role: 'CUSTOMER',
+          isDefault: true,
+          isActive: true,
+        },
+      });
+
       await tx.auditLog.create({
         data: {
+          dairyId: dairy.id,
           actorId: user.id,
           action: 'REGISTER_CUSTOMER',
           entityType: 'CustomerProfile',
@@ -90,14 +121,16 @@ export async function POST(request) {
         },
       });
 
-      return { user, profile };
+      return { user, profile, dairy };
     });
 
     return NextResponse.json(
       {
         success: true,
-        message: 'Customer account registered successfully! You may now sign in using your mobile number or email.',
+        message: `Customer account registered successfully under ${result.dairy.name}! You may now sign in using your mobile number or email.`,
         customerCode: result.profile.customerCode,
+        dairyId: result.dairy.id,
+        dairyName: result.dairy.name,
       },
       { status: 201 }
     );

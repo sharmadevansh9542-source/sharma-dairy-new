@@ -31,7 +31,7 @@ export default async function CustomerDashboard() {
   }
 
   // Fetch only this customer's private data
-  const [sales, payments, charges, received] = await Promise.all([
+  const [sales, payments, charges, received, subscriptions, deliveries, invoices] = await Promise.all([
     prisma.sale.findMany({
       where: { customerId: profile.id },
       take: 200,
@@ -51,12 +51,27 @@ export default async function CustomerDashboard() {
       where: { customerId: profile.id },
       _sum: { amount: true },
     }),
+    prisma.milkSubscription.findMany({
+      where: { customerId: profile.id },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.dailyDelivery.findMany({
+      where: { customerId: profile.id },
+      take: 50,
+      orderBy: { deliveryDate: 'desc' },
+    }),
+    prisma.invoice.findMany({
+      where: { customerId: profile.id },
+      orderBy: { issuedAt: 'desc' },
+    }),
   ]);
 
   const serializedSales = sales.map((s) => ({
     ...s,
     quantityLitres: Number(s.quantityLitres),
     ratePerLitre: Number(s.ratePerLitre),
+    discount: Number(s.discount || 0),
+    taxAmount: Number(s.taxAmount || 0),
     amount: Number(s.amount),
     saleAt: s.saleAt.toISOString(),
     createdAt: s.createdAt.toISOString(),
@@ -68,6 +83,32 @@ export default async function CustomerDashboard() {
     amount: Number(p.amount),
     paidAt: p.paidAt.toISOString(),
     createdAt: p.createdAt.toISOString(),
+  }));
+
+  const serializedSubs = subscriptions.map((s) => ({
+    ...s,
+    dailyQuantity: Number(s.dailyQuantity),
+    ratePerLitre: Number(s.ratePerLitre),
+    startDate: s.startDate.toISOString(),
+    endDate: s.endDate ? s.endDate.toISOString() : null,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+  }));
+
+  const serializedDeliveries = deliveries.map((d) => ({
+    ...d,
+    quantityLitres: Number(d.quantityLitres),
+    deliveryDate: d.deliveryDate.toISOString(),
+    deliveredAt: d.deliveredAt ? d.deliveredAt.toISOString() : null,
+  }));
+
+  const serializedInvoices = invoices.map((i) => ({
+    ...i,
+    subtotal: Number(i.subtotal),
+    paidAmount: Number(i.paidAmount),
+    periodStart: i.periodStart.toISOString(),
+    periodEnd: i.periodEnd.toISOString(),
+    issuedAt: i.issuedAt.toISOString(),
   }));
 
   return (
@@ -93,6 +134,9 @@ export default async function CustomerDashboard() {
       payments={serializedPayments}
       totalBilled={Number(charges._sum.amount || 0)}
       totalPaid={Number(received._sum.amount || 0)}
+      invoices={serializedInvoices}
+      initialSubscriptions={serializedSubs}
+      initialDeliveries={serializedDeliveries}
     />
   );
 }

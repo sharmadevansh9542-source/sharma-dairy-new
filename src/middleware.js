@@ -4,7 +4,7 @@ export function middleware(request) {
   const { pathname } = request.nextUrl;
   const sessionToken = request.cookies.get('sharma_dairy_session')?.value;
 
-  const protectedPrefixes = ['/admin', '/farmer', '/customer', '/staff', '/dashboard'];
+  const protectedPrefixes = ['/super-admin', '/admin', '/farmer', '/customer', '/staff', '/dashboard'];
   const isProtected = protectedPrefixes.some((prefix) => pathname.startsWith(prefix));
 
   if (isProtected && !sessionToken) {
@@ -18,6 +18,7 @@ export function middleware(request) {
 
 export const config = {
   matcher: [
+    '/super-admin/:path*',
     '/admin/:path*',
     '/farmer/:path*',
     '/customer/:path*',

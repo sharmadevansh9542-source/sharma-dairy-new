@@ -24,7 +24,12 @@ import {
   Mail,
   ShieldAlert,
   ArrowRight,
+  Truck,
+  Package,
+  BookOpen,
 } from 'lucide-react';
+import DigitalIdCard from '@/components/digital-id-card';
+import NotificationBell from '@/components/notification-bell';
 
 export default function StaffDashboardView({
   user,
@@ -72,6 +77,38 @@ export default function StaffDashboardView({
       icon: Wallet,
       perm: 'payment.record',
       enabled: hasPerm('payment.record'),
+    },
+    {
+      href: '/admin/subscriptions',
+      title: 'Subscriptions & Delivery',
+      desc: 'Generate daily milk routes and confirm deliveries',
+      icon: Truck,
+      perm: 'subscriptions.manage',
+      enabled: hasPerm('subscriptions.manage'),
+    },
+    {
+      href: '/admin/products',
+      title: 'Products & Purchases',
+      desc: 'Manage packaged dairy goods and supplier purchase orders',
+      icon: Package,
+      perm: 'products.manage',
+      enabled: hasPerm('products.manage'),
+    },
+    {
+      href: '/admin/stock',
+      title: 'Raw Milk Stock',
+      desc: 'View tank stock levels and record processing losses',
+      icon: Boxes,
+      perm: 'stock.adjust',
+      enabled: hasPerm('stock.adjust'),
+    },
+    {
+      href: '/admin/accounting',
+      title: 'Accounting & Cashbook',
+      desc: 'View cashbook, bankbook and balanced journal entries',
+      icon: BookOpen,
+      perm: 'accounting.view',
+      enabled: hasPerm('accounting.view'),
     },
     {
       href: '/admin/reports',
@@ -199,7 +236,8 @@ export default function StaffDashboardView({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <NotificationBell endpoint="/api/notifications" />
             <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-900">
               <ShieldCheck size={14} className="text-green-700" /> Authorized Staff
             </span>
@@ -209,6 +247,12 @@ export default function StaffDashboardView({
         {/* TAB 1: WORKSPACE OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
+            <DigitalIdCard
+              fullName={user.fullName}
+              code={profile.employeeCode}
+              roleLabel={profile.jobTitle || 'Operations Staff'}
+              subtitle={profile.department || 'Authorized Dairy Staff'}
+            />
             {/* KPI Cards */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { apiUser } from '@/lib/auth/guard';
+import { apiTenantUser } from '@/lib/auth/tenant';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    const { response } = await apiUser(['ADMIN']);
+    const { context, response } = await apiTenantUser(['ADMIN']);
     if (response) return response;
 
     const invitations = await prisma.staffInvitation.findMany({
+      where: { dairyId: context.dairyId },
       take: 100,
       orderBy: { createdAt: 'desc' },
       include: {

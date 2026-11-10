@@ -23,7 +23,10 @@ import {
   Phone,
   Mail,
   MapPin,
+  Download,
 } from 'lucide-react';
+import DigitalIdCard from '@/components/digital-id-card';
+import NotificationBell from '@/components/notification-bell';
 
 const formatMoney = (val) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(val || 0));
@@ -186,7 +189,37 @@ export default function FarmerDashboardView({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <NotificationBell endpoint="/api/notifications" />
+            <button
+              type="button"
+              onClick={() => {
+                const rows = [
+                  ['Date', 'Shift', 'Milk Type', 'Quantity (L)', 'Fat %', 'SNF %', 'Rate (INR)', 'Amount (INR)'],
+                  ...collections.map((c) => [
+                    new Date(c.collectionAt).toLocaleDateString('en-IN'),
+                    c.shift,
+                    c.milkType?.label || c.milkTypeId,
+                    c.quantityLitres,
+                    c.fatPercent ?? '',
+                    c.snfPercent ?? '',
+                    c.ratePerLitre,
+                    c.amount,
+                  ]),
+                ];
+                const csv = rows.map((r) => r.map((v) => `"${v}"`).join(',')).join('\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `farmer-statement-${profile.farmerCode}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              <Download size={14} /> Download Statement
+            </button>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-900 border border-green-200">
               <Tractor size={14} /> Registered Farmer
             </span>
@@ -196,6 +229,12 @@ export default function FarmerDashboardView({
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
+            <DigitalIdCard
+              fullName={user.fullName}
+              code={profile.farmerCode}
+              roleLabel="Farmer Supplier"
+              subtitle={profile.village || 'Registered Milk Supplier'}
+            />
             {/* KPI Cards */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

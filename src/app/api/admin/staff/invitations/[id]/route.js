@@ -1,21 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { apiUser, audit } from '@/lib/auth/guard';
+import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
 
 export const runtime = 'nodejs';
 
 export async function DELETE(request, { params }) {
   try {
-    const { user, response } = await apiUser(['ADMIN']);
+    const { context, response } = await apiTenantUser(['ADMIN']);
     if (response) return response;
 
     const { id } = await params;
-    const invitation = await prisma.staffInvitation.findUnique({
-      where: { id },
+    const invitation = await prisma.staffInvitation.findFirst({
+      where: { id, dairyId: context.dairyId },
     });
 
     if (!invitation) {
-      return NextResponse.json({ error: 'Invitation not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Invitation not found in your dairy.' }, { status: 404 });
     }
 
     if (invitation.usedAt) {
@@ -24,8 +24,9 @@ export async function DELETE(request, { params }) {
 
     await prisma.staffInvitation.delete({ where: { id } });
 
-    await audit({
-      actorId: user.id,
+    await tenantAudit({
+      actorId: context.user.id,
+      dairyId: context.dairyId,
       action: 'REVOKE_STAFF_INVITATION',
       entityType: 'StaffInvitation',
       entityId: id,

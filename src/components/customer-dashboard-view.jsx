@@ -24,6 +24,8 @@ import {
   Clock,
   FileText,
 } from 'lucide-react';
+import DigitalIdCard from '@/components/digital-id-card';
+import NotificationBell from '@/components/notification-bell';
 
 const formatMoney = (val) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(val || 0));
@@ -36,8 +38,28 @@ export default function CustomerDashboardView({
   totalBilled = 0,
   totalPaid = 0,
   invoices = [],
+  initialSubscriptions = [],
+  initialDeliveries = [],
 }) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [subscriptions, setSubscriptions] = useState(initialSubscriptions);
+  const [subBusyId, setSubBusyId] = useState(null);
+
+  async function toggleSubscription(id, nextStatus) {
+    setSubBusyId(id);
+    try {
+      const res = await fetch('/api/subscriptions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: nextStatus }),
+      });
+      if (res.ok) {
+        setSubscriptions((prev) => prev.map((s) => (s.id === id ? { ...s, status: nextStatus } : s)));
+      }
+    } finally {
+      setSubBusyId(null);
+    }
+  }
 
   // Security state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -167,7 +189,8 @@ export default function CustomerDashboardView({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <NotificationBell endpoint="/api/notifications" />
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-900 border border-emerald-200">
               <ShoppingBag size={14} /> Registered Buyer
             </span>
@@ -177,6 +200,48 @@ export default function CustomerDashboardView({
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
+            <DigitalIdCard
+              fullName={user.fullName}
+              code={profile.customerCode}
+              roleLabel="Verified Customer"
+              subtitle={profile.category || 'Dairy Subscriber'}
+            />
+
+            {subscriptions.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+                <h2 className="text-sm font-bold text-slate-900">Your Daily Milk Subscriptions</h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {subscriptions.map((sub) => (
+                    <div key={sub.id} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-xs">
+                      <div>
+                        <span className="font-bold text-slate-900 block">
+                          {sub.dailyQuantity} L {sub.milkType} Milk ({sub.deliveryShift})
+                        </span>
+                        <span className="text-slate-500">Rate: ₹{sub.ratePerLitre}/L · Status: <b>{sub.status}</b></span>
+                      </div>
+                      {sub.status === 'ACTIVE' && (
+                        <button
+                          disabled={subBusyId === sub.id}
+                          onClick={() => toggleSubscription(sub.id, 'PAUSED')}
+                          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-semibold text-amber-800 hover:bg-amber-100 cursor-pointer"
+                        >
+                          {subBusyId === sub.id ? '...' : 'Pause'}
+                        </button>
+                      )}
+                      {sub.status === 'PAUSED' && (
+                        <button
+                          disabled={subBusyId === sub.id}
+                          onClick={() => toggleSubscription(sub.id, 'ACTIVE')}
+                          className="rounded-lg bg-emerald-700 px-3 py-1.5 font-semibold text-white hover:bg-emerald-800 cursor-pointer"
+                        >
+                          {subBusyId === sub.id ? '...' : 'Resume'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* KPI Cards */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

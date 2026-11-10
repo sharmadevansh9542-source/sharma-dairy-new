@@ -42,6 +42,12 @@ export async function POST(request) {
       where: isEmail
         ? { email: normalizedIdentifier }
         : { phone: normalizedIdentifier },
+      include: {
+        dairy: true,
+        memberships: {
+          include: { dairy: true },
+        },
+      },
     });
 
     // Check password
@@ -52,14 +58,26 @@ export async function POST(request) {
     // Check account status
     if (!user.isActive) {
       return NextResponse.json(
-        { error: 'Your account is deactivated or suspended. Please contact the Sharma Dairy administrator.' },
+        { error: 'Your account is deactivated or suspended. Please contact the administrator.' },
         { status: 403 }
       );
     }
 
-    // Determine dashboard URL based on database role
+    // Check dairy status if not super admin
+    const activeDairy = user.memberships?.[0]?.dairy || user.dairy;
+    if (user.role !== 'SUPER_ADMIN' && activeDairy && activeDairy.status === 'SUSPENDED') {
+      return NextResponse.json(
+        { error: `The dairy business account (${activeDairy.name}) is currently suspended. Please contact platform support.` },
+        { status: 403 }
+      );
+    }
+
+    // Determine dashboard URL strictly based on database role
     let redirectUrl = '/dashboard';
     switch (user.role) {
+      case 'SUPER_ADMIN':
+        redirectUrl = '/super-admin/dashboard';
+        break;
       case 'ADMIN':
         redirectUrl = '/admin/dashboard';
         break;
@@ -74,11 +92,13 @@ export async function POST(request) {
         break;
     }
 
-    await createSession(user.id);
+    const sessionDays = body?.rememberMe ? 30 : 7;
+    await createSession(user.id, sessionDays);
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     await prisma.auditLog.create({
       data: {
         actorId: user.id,
+        dairyId: activeDairy?.id || undefined,
         action: 'LOGIN',
         entityType: 'User',
         entityId: user.id,
@@ -93,6 +113,8 @@ export async function POST(request) {
         role: user.role,
         email: user.email,
         phone: user.phone,
+        dairyId: activeDairy?.id || null,
+        dairyName: activeDairy?.name || null,
       },
       redirectUrl,
     });

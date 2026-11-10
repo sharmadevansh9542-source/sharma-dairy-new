@@ -1,16 +1,39 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   STAFF
   FARMER
   CUSTOMER
+}
+
+enum DairyStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum SubscriptionPlanStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  EXPIRED
+  CANCELLED
+  SUSPENDED
 }
 
 enum MilkType {
@@ -77,27 +100,215 @@ enum InvoiceStatus {
   CANCELLED
 }
 
-model User {
-  id              String   @id @default(cuid())
-  email           String?  @unique
-  phone           String?  @unique
-  fullName        String
+model Dairy {
+  id           String      @id @default(cuid())
+  name         String
+  code         String      @unique
+  slug         String      @unique
+  ownerName    String
+  email        String?
+  phone        String?
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  logoUrl      String?
+  businessType String?     @default("DAIRY")
+  description  String?
+  status       DairyStatus @default(APPROVED)
+  settings     Json?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  memberships              DairyMembership[]
+  users                    User[]
+  farmerProfiles           FarmerProfile[]
+  customerProfiles         CustomerProfile[]
+  staffProfiles            StaffProfile[]
+  staffInvitations         StaffInvitation[]
+  milkRates                MilkRate[]
+  milkCollections          MilkCollection[]
+  sales                    Sale[]
+  farmerPayments           FarmerPayment[]
+  customerPayments         CustomerPayment[]
+  ledgerEntries            LedgerEntry[]
+  stockMovements           StockMovement[]
+  expenses                 Expense[]
+  invoices                 Invoice[]
+  dailyClosings            DailyClosing[]
+  auditLogs                AuditLog[]
+  subscriptions            Subscription[]
+  products                 Product[]
+  suppliers                Supplier[]
+  purchases                Purchase[]
+  milkSubscriptions        MilkSubscription[]
+  dailyDeliveries          DailyDelivery[]
+  notifications            Notification[]
+  notificationDeliveryLogs NotificationDeliveryLog[]
+  accounts                 Account[]
+  journalEntries           JournalEntry[]
+
+  @@index([status, createdAt])
+}
+
+model DairyMembership {
+  id        String   @id @default(cuid())
+  dairyId   String
+  userId    String
+  role      Role
+  isDefault Boolean  @default(true)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dairy Dairy @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([dairyId, userId])
+  @@index([userId, isActive])
+  @@index([dairyId, role])
+}
+
+model DairyRegistrationRequest {
+  id              String      @id @default(cuid())
+  dairyName       String
+  ownerName       String
+  businessEmail   String
+  phone           String
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  logoUrl         String?
+  businessType    String?     @default("DAIRY")
+  description     String?
+  adminFullName   String
+  adminEmail      String
+  adminPhone      String?
   passwordHash    String
-  role            Role
-  isActive        Boolean  @default(true)
-  lastLoginAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  sessions        Session[]
-  farmerProfile   FarmerProfile?
-  customerProfile CustomerProfile?
-  staffProfile    StaffProfile?
-  auditLogs       AuditLog[] @relation("AuditActor")
-  createdCollections MilkCollection[] @relation("CollectionCreator")
-  createdSales    Sale[] @relation("SaleCreator")
-  createdExpenses Expense[] @relation("ExpenseCreator")
-  permissions     UserPermission[]
-  staffInvitations StaffInvitation[] @relation("StaffInviter")
+  status          DairyStatus @default(PENDING_APPROVAL)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdDairyId  String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([status, createdAt])
+  @@index([businessEmail])
+}
+
+model SubscriptionPlan {
+  id           String                 @id @default(cuid())
+  name         String                 @unique
+  code         String                 @unique
+  description  String?
+  priceMonthly Decimal                @db.Decimal(10, 2)
+  priceYearly  Decimal                @db.Decimal(10, 2)
+  trialDays    Int                    @default(14)
+  maxFarmers   Int                    @default(50)
+  maxCustomers Int                    @default(100)
+  maxStaff     Int                    @default(5)
+  features     Json?
+  status       SubscriptionPlanStatus @default(ACTIVE)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  dairyId           String
+  planId            String
+  status            SubscriptionStatus @default(TRIAL)
+  startDate         DateTime           @default(now())
+  currentPeriodEnd  DateTime
+  cancelAtPeriodEnd Boolean            @default(false)
+  trialEndsAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  dairy    Dairy                 @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  plan     SubscriptionPlan      @relation(fields: [planId], references: [id])
+  payments SubscriptionPayment[]
+
+  @@index([dairyId, status])
+  @@index([status, currentPeriodEnd])
+}
+
+model SubscriptionPayment {
+  id             String        @id @default(cuid())
+  subscriptionId String
+  dairyId        String
+  amount         Decimal       @db.Decimal(12, 2)
+  currency       String        @default("INR")
+  method         PaymentMethod @default(UPI)
+  status         String        @default("COMPLETED")
+  transactionRef String?
+  invoiceNumber  String?       @unique
+  paidAt         DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([dairyId, paidAt])
+}
+
+model PlatformNotification {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([isRead, createdAt])
+}
+
+model PlatformAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  dairyId    String?
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([dairyId, createdAt])
+}
+
+model User {
+  id           String    @id @default(cuid())
+  dairyId      String?
+  email        String?   @unique
+  phone        String?   @unique
+  fullName     String
+  passwordHash String
+  role         Role
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  dairy              Dairy?            @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  memberships        DairyMembership[]
+  sessions           Session[]
+  farmerProfile      FarmerProfile?
+  customerProfile    CustomerProfile?
+  staffProfile       StaffProfile?
+  auditLogs          AuditLog[]        @relation("AuditActor")
+  createdCollections MilkCollection[]  @relation("CollectionCreator")
+  createdSales       Sale[]            @relation("SaleCreator")
+  createdExpenses    Expense[]         @relation("ExpenseCreator")
+  permissions        UserPermission[]
+  staffInvitations   StaffInvitation[] @relation("StaffInviter")
+
+  @@index([dairyId, role])
 }
 
 model Session {
@@ -107,17 +318,19 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId, expiresAt])
   @@index([expiresAt])
 }
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
   userId    String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+
   @@index([userId, expiresAt])
 }
 
@@ -127,303 +340,601 @@ model Permission {
   description String
   users       UserPermission[]
 }
+
 model UserPermission {
-  userId String
+  userId       String
   permissionId String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
   @@id([userId, permissionId])
 }
 
 model FarmerProfile {
-  id String @id @default(cuid())
-  farmerCode String @unique
-  userId String @unique
-  address String?
-  village String?
-  animalType String?
-  fatherName String?
-  alternatePhone String?
+  id               String   @id @default(cuid())
+  dairyId          String?
+  farmerCode       String   @unique
+  userId           String   @unique
+  address          String?
+  village          String?
+  animalType       String?
+  fatherName       String?
+  alternatePhone   String?
   registrationDate DateTime @default(now())
-  openingBalance Decimal @default(0) @db.Decimal(14, 2)
-  isActive Boolean @default(true)
-  user User @relation(fields: [userId], references: [id])
-  collections MilkCollection[]
-  payments FarmerPayment[]
+  openingBalance   Decimal  @default(0) @db.Decimal(14, 2)
+  isActive         Boolean  @default(true)
+
+  dairy         Dairy?           @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  user          User             @relation(fields: [userId], references: [id])
+  collections   MilkCollection[]
+  payments      FarmerPayment[]
   ledgerEntries LedgerEntry[]
+
+  @@index([dairyId, isActive])
   @@index([village, isActive])
 }
 
 model CustomerProfile {
-  id String @id @default(cuid())
-  customerCode String @unique
-  userId String @unique
-  address String?
-  alternatePhone String?
-  category String @default("HOUSEHOLD")
-  defaultMilkType MilkType @default(COW)
-  defaultRate Decimal? @db.Decimal(10, 2)
+  id               String   @id @default(cuid())
+  dairyId          String?
+  customerCode     String   @unique
+  userId           String   @unique
+  address          String?
+  alternatePhone   String?
+  category         String   @default("HOUSEHOLD")
+  defaultMilkType  MilkType @default(COW)
+  defaultRate      Decimal? @db.Decimal(10, 2)
   dailyRequirement Decimal? @db.Decimal(10, 3)
   deliverySchedule Json?
-  billingCycle String @default("MONTHLY")
-  openingBalance Decimal @default(0) @db.Decimal(14, 2)
-  isActive Boolean @default(true)
-  user User @relation(fields: [userId], references: [id])
-  sales Sale[]
-  payments CustomerPayment[]
-  ledgerEntries LedgerEntry[]
+  billingCycle     String   @default("MONTHLY")
+  openingBalance   Decimal  @default(0) @db.Decimal(14, 2)
+  isActive         Boolean  @default(true)
+
+  dairy             Dairy?             @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  user              User               @relation(fields: [userId], references: [id])
+  sales             Sale[]
+  payments          CustomerPayment[]
+  ledgerEntries     LedgerEntry[]
+  milkSubscriptions MilkSubscription[]
+  deliveries        DailyDelivery[]
+
+  @@index([dairyId, isActive])
   @@index([category, isActive])
 }
 
 model StaffProfile {
-  id String @id @default(cuid())
-  employeeCode String @unique
-  userId String @unique
-  jobTitle String?
-  department String?
+  id             String   @id @default(cuid())
+  dairyId        String?
+  employeeCode   String   @unique
+  userId         String   @unique
+  managerRole    String?  @default("STAFF")
+  jobTitle       String?
+  department     String?
   alternatePhone String?
-  hiredAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id])
+  hiredAt        DateTime @default(now())
+
+  dairy Dairy? @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  user  User   @relation(fields: [userId], references: [id])
+
+  @@index([dairyId])
 }
 
 model StaffInvitation {
   id          String    @id @default(cuid())
+  dairyId     String?
   email       String
   tokenHash   String    @unique
   expiresAt   DateTime
   usedAt      DateTime?
   invitedById String
   createdAt   DateTime  @default(now())
-  invitedBy   User      @relation("StaffInviter", fields: [invitedById], references: [id], onDelete: Cascade)
 
-  @@index([email])
+  dairy     Dairy? @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  invitedBy User   @relation("StaffInviter", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([dairyId, email])
   @@index([tokenHash])
 }
 
 model MilkTypeConfig {
-  id String @id @default(cuid())
-  type MilkType @unique
-  label String
-  isActive Boolean @default(true)
-  rates MilkRate[]
-  collections MilkCollection[]
-  sales Sale[]
+  id             String           @id @default(cuid())
+  type           MilkType         @unique
+  label          String
+  isActive       Boolean          @default(true)
+  rates          MilkRate[]
+  collections    MilkCollection[]
+  sales          Sale[]
   stockMovements StockMovement[]
 }
 
 model MilkRate {
-  id String @id @default(cuid())
-  milkTypeId String
-  pricingMethod PricingMethod @default(FIXED)
-  fixedRate Decimal? @db.Decimal(10, 2)
-  // Configurable policy coefficients; the exact formula is documented and tested in shared calculation code.
-  fatRate Decimal? @db.Decimal(10, 4)
-  snfRate Decimal? @db.Decimal(10, 4)
-  baseRate Decimal? @db.Decimal(10, 2)
-  effectiveFrom DateTime
-  effectiveTo DateTime?
+  id              String        @id @default(cuid())
+  dairyId         String?
+  milkTypeId      String
+  pricingMethod   PricingMethod @default(FIXED)
+  fixedRate       Decimal?      @db.Decimal(10, 2)
+  fatRate         Decimal?      @db.Decimal(10, 4)
+  snfRate         Decimal?      @db.Decimal(10, 4)
+  baseRate        Decimal?      @db.Decimal(10, 2)
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
   farmerProfileId String?
-  createdById String?
-  createdAt DateTime @default(now())
+  createdById     String?
+  createdAt       DateTime      @default(now())
+
+  dairy    Dairy?         @relation(fields: [dairyId], references: [id], onDelete: SetNull)
   milkType MilkTypeConfig @relation(fields: [milkTypeId], references: [id])
+
+  @@index([dairyId, milkTypeId, effectiveFrom])
   @@index([milkTypeId, effectiveFrom, effectiveTo])
   @@index([farmerProfileId, effectiveFrom])
 }
 
 model MilkCollection {
-  id String @id @default(cuid())
-  collectionCode String @unique
-  farmerId String
-  milkTypeId String
-  collectionAt DateTime
-  shift Shift
-  quantityLitres Decimal @db.Decimal(12, 3)
-  fatPercent Decimal? @db.Decimal(5, 2)
-  snfPercent Decimal? @db.Decimal(5, 2)
-  ratePerLitre Decimal @db.Decimal(10, 2)
-  amount Decimal @db.Decimal(14, 2)
-  rateSnapshot Json
-  notes String?
-  idempotencyKey String? @unique
-  createdById String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  farmer FarmerProfile @relation(fields: [farmerId], references: [id])
-  milkType MilkTypeConfig @relation(fields: [milkTypeId], references: [id])
-  createdBy User @relation("CollectionCreator", fields: [createdById], references: [id])
-  @@index([collectionAt, shift])
+  id             String   @id @default(cuid())
+  dairyId        String?
+  collectionCode String   @unique
+  farmerId       String
+  milkTypeId     String
+  collectionAt   DateTime
+  shift          Shift
+  quantityLitres Decimal  @db.Decimal(12, 3)
+  fatPercent     Decimal? @db.Decimal(5, 2)
+  snfPercent     Decimal? @db.Decimal(5, 2)
+  ratePerLitre   Decimal  @db.Decimal(10, 2)
+  amount         Decimal  @db.Decimal(14, 2)
+  rateSnapshot   Json
+  notes          String?
+  idempotencyKey String?  @unique
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  dairy     Dairy?         @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  farmer    FarmerProfile  @relation(fields: [farmerId], references: [id])
+  milkType  MilkTypeConfig @relation(fields: [milkTypeId], references: [id])
+  createdBy User           @relation("CollectionCreator", fields: [createdById], references: [id])
+
+  @@index([dairyId, collectionAt, shift])
   @@index([farmerId, collectionAt])
 }
 
 model Sale {
-  id String @id @default(cuid())
-  saleCode String @unique
-  customerId String
-  milkTypeId String
-  saleAt DateTime @default(now())
-  quantityLitres Decimal @db.Decimal(12, 3)
-  ratePerLitre Decimal @db.Decimal(10, 2)
-  amount Decimal @db.Decimal(14, 2)
-  status DeliveryStatus @default(PENDING)
-  idempotencyKey String? @unique
-  notes String?
-  createdById String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  customer CustomerProfile @relation(fields: [customerId], references: [id])
-  milkType MilkTypeConfig @relation(fields: [milkTypeId], references: [id])
-  createdBy User @relation("SaleCreator", fields: [createdById], references: [id])
+  id             String         @id @default(cuid())
+  dairyId        String?
+  saleCode       String         @unique
+  customerId     String?
+  walkInName     String?
+  milkTypeId     String?
+  productId      String?
+  saleAt         DateTime       @default(now())
+  quantityLitres Decimal        @db.Decimal(12, 3)
+  ratePerLitre   Decimal        @db.Decimal(10, 2)
+  discount       Decimal        @default(0) @db.Decimal(10, 2)
+  taxAmount      Decimal        @default(0) @db.Decimal(10, 2)
+  amount         Decimal        @db.Decimal(14, 2)
+  paymentMethod  PaymentMethod  @default(CASH)
+  paymentStatus  String         @default("PAID")
+  status         DeliveryStatus @default(PENDING)
+  idempotencyKey String?        @unique
+  notes          String?
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  dairy          Dairy?           @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  customer       CustomerProfile? @relation(fields: [customerId], references: [id])
+  milkType       MilkTypeConfig?  @relation(fields: [milkTypeId], references: [id])
+  product        Product?         @relation(fields: [productId], references: [id])
+  createdBy      User             @relation("SaleCreator", fields: [createdById], references: [id])
   stockMovements StockMovement[]
-  invoiceItems InvoiceItem[]
-  @@index([saleAt, status])
+  invoiceItems   InvoiceItem[]
+
+  @@index([dairyId, saleAt, status])
   @@index([customerId, saleAt])
 }
 
 model FarmerPayment {
-  id String @id @default(cuid())
-  paymentCode String @unique
-  farmerId String
-  amount Decimal @db.Decimal(14, 2)
-  paidAt DateTime @default(now())
-  method PaymentMethod
-  reference String?
+  id          String        @id @default(cuid())
+  dairyId     String?
+  paymentCode String        @unique
+  farmerId    String
+  amount      Decimal       @db.Decimal(14, 2)
+  paidAt      DateTime      @default(now())
+  method      PaymentMethod
+  reference   String?
   periodStart DateTime?
-  periodEnd DateTime?
-  notes String?
+  periodEnd   DateTime?
+  notes       String?
   createdById String
-  createdAt DateTime @default(now())
+  createdAt   DateTime      @default(now())
+
+  dairy  Dairy?        @relation(fields: [dairyId], references: [id], onDelete: SetNull)
   farmer FarmerProfile @relation(fields: [farmerId], references: [id])
+
+  @@index([dairyId, paidAt])
   @@index([farmerId, paidAt])
 }
 
 model CustomerPayment {
-  id String @id @default(cuid())
-  paymentCode String @unique
-  customerId String
-  amount Decimal @db.Decimal(14, 2)
-  paidAt DateTime @default(now())
-  method PaymentMethod
-  reference String?
-  notes String?
+  id          String        @id @default(cuid())
+  dairyId     String?
+  paymentCode String        @unique
+  customerId  String
+  amount      Decimal       @db.Decimal(14, 2)
+  paidAt      DateTime      @default(now())
+  method      PaymentMethod
+  reference   String?
+  notes       String?
   createdById String
-  createdAt DateTime @default(now())
+  createdAt   DateTime      @default(now())
+
+  dairy    Dairy?          @relation(fields: [dairyId], references: [id], onDelete: SetNull)
   customer CustomerProfile @relation(fields: [customerId], references: [id])
+
+  @@index([dairyId, paidAt])
   @@index([customerId, paidAt])
 }
 
 model LedgerEntry {
-  id String @id @default(cuid())
-  partyType LedgerPartyType
-  farmerId String?
-  customerId String?
-  entryType LedgerEntryType
-  amount Decimal @db.Decimal(14, 2)
-  entryAt DateTime @default(now())
+  id            String          @id @default(cuid())
+  dairyId       String?
+  partyType     LedgerPartyType
+  farmerId      String?
+  customerId    String?
+  entryType     LedgerEntryType
+  amount        Decimal         @db.Decimal(14, 2)
+  entryAt       DateTime        @default(now())
   referenceType String?
-  referenceId String?
-  description String?
-  reversalOfId String?
-  createdById String
-  createdAt DateTime @default(now())
-  farmer FarmerProfile? @relation(fields: [farmerId], references: [id])
+  referenceId   String?
+  description   String?
+  reversalOfId  String?
+  createdById   String
+  createdAt     DateTime        @default(now())
+
+  dairy    Dairy?           @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  farmer   FarmerProfile?   @relation(fields: [farmerId], references: [id])
   customer CustomerProfile? @relation(fields: [customerId], references: [id])
+
+  @@index([dairyId, entryAt])
   @@index([farmerId, entryAt])
   @@index([customerId, entryAt])
   @@index([referenceType, referenceId])
 }
 
 model StockMovement {
-  id String @id @default(cuid())
-  movementType StockMovementType
-  milkTypeId String
-  quantityLitres Decimal @db.Decimal(12, 3) // signed: inflow positive, outflow negative
-  movementAt DateTime @default(now())
-  referenceType String?
-  referenceId String?
-  saleId String?
-  notes String?
-  createdById String
-  createdAt DateTime @default(now())
+  id             String            @id @default(cuid())
+  dairyId        String?
+  movementType   StockMovementType
+  milkTypeId     String
+  quantityLitres Decimal           @db.Decimal(12, 3)
+  movementAt     DateTime          @default(now())
+  referenceType  String?
+  referenceId    String?
+  saleId         String?
+  notes          String?
+  createdById    String
+  createdAt      DateTime          @default(now())
+
+  dairy    Dairy?         @relation(fields: [dairyId], references: [id], onDelete: SetNull)
   milkType MilkTypeConfig @relation(fields: [milkTypeId], references: [id])
-  sale Sale? @relation(fields: [saleId], references: [id])
+  sale     Sale?          @relation(fields: [saleId], references: [id])
+
+  @@index([dairyId, movementAt])
   @@index([milkTypeId, movementAt])
   @@index([referenceType, referenceId])
 }
 
 model Expense {
-  id String @id @default(cuid())
-  expenseCode String @unique
-  category String
-  amount Decimal @db.Decimal(14, 2)
-  expenseAt DateTime @default(now())
-  method PaymentMethod
+  id          String        @id @default(cuid())
+  dairyId     String?
+  expenseCode String        @unique
+  category    String
+  amount      Decimal       @db.Decimal(14, 2)
+  expenseAt   DateTime      @default(now())
+  method      PaymentMethod
   description String?
-  receiptUrl String?
+  receiptUrl  String?
   createdById String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  createdBy User @relation("ExpenseCreator", fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  dairy     Dairy? @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  createdBy User   @relation("ExpenseCreator", fields: [createdById], references: [id])
+
+  @@index([dairyId, expenseAt])
   @@index([expenseAt, category])
 }
 
 model Invoice {
-  id String @id @default(cuid())
-  invoiceNumber String @unique
-  customerId String
-  periodStart DateTime
-  periodEnd DateTime
-  issuedAt DateTime @default(now())
-  subtotal Decimal @db.Decimal(14, 2)
-  paidAmount Decimal @default(0) @db.Decimal(14, 2)
-  status InvoiceStatus @default(ISSUED)
-  items InvoiceItem[]
+  id            String        @id @default(cuid())
+  dairyId       String?
+  invoiceNumber String        @unique
+  customerId    String
+  periodStart   DateTime
+  periodEnd     DateTime
+  issuedAt      DateTime      @default(now())
+  subtotal      Decimal       @db.Decimal(14, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  status        InvoiceStatus @default(ISSUED)
+  items         InvoiceItem[]
+
+  dairy Dairy? @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+
+  @@index([dairyId, status])
   @@index([customerId, periodStart, periodEnd])
 }
+
 model InvoiceItem {
-  id String @id @default(cuid())
-  invoiceId String
-  saleId String?
+  id          String  @id @default(cuid())
+  invoiceId   String
+  saleId      String?
   description String
-  quantity Decimal @db.Decimal(12, 3)
-  rate Decimal @db.Decimal(10, 2)
-  amount Decimal @db.Decimal(14, 2)
+  quantity    Decimal @db.Decimal(12, 3)
+  rate        Decimal @db.Decimal(10, 2)
+  amount      Decimal @db.Decimal(14, 2)
+
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  sale Sale? @relation(fields: [saleId], references: [id])
+  sale    Sale?   @relation(fields: [saleId], references: [id])
 }
 
 model DailyClosing {
-  id String @id @default(cuid())
-  businessDate DateTime @unique
-  openingStock Decimal @db.Decimal(12, 3)
-  milkReceived Decimal @db.Decimal(12, 3)
-  milkSold Decimal @db.Decimal(12, 3)
-  losses Decimal @db.Decimal(12, 3)
-  otherOutflows Decimal @db.Decimal(12, 3)
-  closingStock Decimal @db.Decimal(12, 3)
-  cashOpening Decimal @db.Decimal(14, 2) @default(0)
-  cashReceived Decimal @db.Decimal(14, 2) @default(0)
-  cashPaid Decimal @db.Decimal(14, 2) @default(0)
-  cashClosing Decimal @db.Decimal(14, 2) @default(0)
-  closedById String
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  dairyId       String?
+  businessDate  DateTime
+  openingStock  Decimal  @db.Decimal(12, 3)
+  milkReceived  Decimal  @db.Decimal(12, 3)
+  milkSold      Decimal  @db.Decimal(12, 3)
+  losses        Decimal  @db.Decimal(12, 3)
+  otherOutflows Decimal  @db.Decimal(12, 3)
+  closingStock  Decimal  @db.Decimal(12, 3)
+  cashOpening   Decimal  @default(0) @db.Decimal(14, 2)
+  cashReceived  Decimal  @default(0) @db.Decimal(14, 2)
+  cashPaid      Decimal  @default(0) @db.Decimal(14, 2)
+  cashClosing   Decimal  @default(0) @db.Decimal(14, 2)
+  closedById    String
+  createdAt     DateTime @default(now())
+
+  dairy Dairy? @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+
+  @@unique([dairyId, businessDate])
+  @@index([dairyId, businessDate])
 }
 
 model AuditLog {
-  id String @id @default(cuid())
-  actorId String?
-  action String
+  id         String   @id @default(cuid())
+  dairyId    String?
+  actorId    String?
+  action     String
   entityType String
-  entityId String?
-  before Json?
-  after Json?
-  ipAddress String?
-  createdAt DateTime @default(now())
-  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  dairy Dairy? @relation(fields: [dairyId], references: [id], onDelete: SetNull)
+  actor User?  @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([dairyId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([actorId, createdAt])
 }
 
 model ApplicationSetting {
+  key         String   @id
+  value       Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
+model Product {
+  id            String    @id @default(cuid())
+  dairyId       String
+  sku           String
+  name          String
+  category      String    @default("GENERAL")
+  unit          String    @default("KG")
+  purchasePrice Decimal   @db.Decimal(10, 2)
+  sellingPrice  Decimal   @db.Decimal(10, 2)
+  currentStock  Decimal   @default(0) @db.Decimal(12, 3)
+  minStockAlert Decimal   @default(5) @db.Decimal(12, 3)
+  expiryDate    DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  dairy         Dairy          @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  purchaseItems PurchaseItem[]
+  sales         Sale[]
+
+  @@unique([dairyId, sku])
+  @@index([dairyId, category, isActive])
+}
+
+model Supplier {
+  id            String   @id @default(cuid())
+  dairyId       String
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  city          String?
+  gstin         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  dairy     Dairy      @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@index([dairyId, isActive])
+}
+
+model Purchase {
+  id            String   @id @default(cuid())
+  dairyId       String
+  purchaseCode  String
+  supplierId    String
+  purchaseDate  DateTime @default(now())
+  totalAmount   Decimal  @db.Decimal(14, 2)
+  paidAmount    Decimal  @default(0) @db.Decimal(14, 2)
+  paymentStatus String   @default("PAID")
+  notes         String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  dairy    Dairy          @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  supplier Supplier       @relation(fields: [supplierId], references: [id])
+  items    PurchaseItem[]
+
+  @@unique([dairyId, purchaseCode])
+  @@index([dairyId, purchaseDate])
+}
+
+model PurchaseItem {
+  id         String  @id @default(cuid())
+  purchaseId String
+  productId  String
+  quantity   Decimal @db.Decimal(12, 3)
+  unitPrice  Decimal @db.Decimal(10, 2)
+  totalPrice Decimal @db.Decimal(14, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+}
+
+model MilkSubscription {
+  id            String    @id @default(cuid())
+  dairyId       String
+  customerId    String
+  milkType      MilkType  @default(COW)
+  dailyQuantity Decimal   @db.Decimal(10, 3)
+  ratePerLitre  Decimal   @db.Decimal(10, 2)
+  deliveryShift Shift     @default(MORNING)
+  startDate     DateTime
+  endDate       DateTime?
+  status        String    @default("ACTIVE")
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  dairy      Dairy           @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  customer   CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  deliveries DailyDelivery[]
+
+  @@index([dairyId, customerId, status])
+}
+
+model DailyDelivery {
+  id             String         @id @default(cuid())
+  dairyId        String
+  subscriptionId String?
+  customerId     String
+  deliveryDate   DateTime
+  shift          Shift          @default(MORNING)
+  quantityLitres Decimal        @db.Decimal(10, 3)
+  status         DeliveryStatus @default(DELIVERED)
+  deliveredAt    DateTime?      @default(now())
+  notes          String?
+  createdById    String?
+
+  dairy        Dairy             @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  customer     CustomerProfile   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  subscription MilkSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([dairyId, deliveryDate, shift])
+  @@index([customerId, deliveryDate])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  dairyId   String
+  userId    String?
+  role      Role?
+  type      String
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  dairy Dairy @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+
+  @@index([dairyId, isRead, createdAt])
+  @@index([dairyId, userId, isRead])
+}
+
+model NotificationDeliveryLog {
+  id            String   @id @default(cuid())
+  dairyId       String
+  channel       String
+  recipient     String
+  template      String
+  status        String
+  referenceType String?
+  referenceId   String?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+
+  dairy Dairy @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+
+  @@index([dairyId, channel, createdAt])
+}
+
+model Account {
+  id        String   @id @default(cuid())
+  dairyId   String
+  code      String
+  name      String
+  type      String
+  balance   Decimal  @default(0) @db.Decimal(14, 2)
+  isSystem  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dairy Dairy         @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  lines JournalLine[]
+
+  @@unique([dairyId, code])
+  @@index([dairyId, type])
+}
+
+model JournalEntry {
+  id            String   @id @default(cuid())
+  dairyId       String
+  entryNumber   String
+  entryDate     DateTime @default(now())
+  description   String
+  referenceType String?
+  referenceId   String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  dairy Dairy         @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  lines JournalLine[]
+
+  @@unique([dairyId, entryNumber])
+  @@index([dairyId, entryDate])
+}
+
+model JournalLine {
+  id             String  @id @default(cuid())
+  journalEntryId String
+  accountId      String
+  debit          Decimal @default(0) @db.Decimal(14, 2)
+  credit         Decimal @default(0) @db.Decimal(14, 2)
+  memo           String?
+
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      Account      @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+}
+
+model SystemSetting {
   key         String   @id
   value       Json
   updatedAt   DateTime @updatedAt

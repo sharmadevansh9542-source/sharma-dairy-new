@@ -27,6 +27,7 @@ export default async function StaffDashboard() {
   const [collectionsToday, salesToday] = await Promise.all([
     prisma.milkCollection.aggregate({
       where: {
+        dairyId: profile?.dairyId || undefined,
         collectionAt: { gte: today, lt: tomorrow },
       },
       _count: { id: true },
@@ -34,6 +35,7 @@ export default async function StaffDashboard() {
     }),
     prisma.sale.aggregate({
       where: {
+        dairyId: profile?.dairyId || undefined,
         saleAt: { gte: today, lt: tomorrow },
         status: { not: 'CANCELLED' },
       },

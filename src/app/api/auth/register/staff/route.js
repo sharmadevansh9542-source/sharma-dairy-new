@@ -37,6 +37,11 @@ export async function POST(request) {
     // Verify token
     const invitation = await prisma.staffInvitation.findUnique({
       where: { tokenHash },
+      include: {
+        invitedBy: {
+          select: { fullName: true, dairyId: true },
+        },
+      },
     });
 
     if (!invitation) {
@@ -80,10 +85,13 @@ export async function POST(request) {
     const passwordHash = await bcrypt.hash(data.password, 12);
     const employeeCode = `S-${randomUUID().slice(0, 8).toUpperCase()}`;
 
+    const dairyId = invitation.dairyId || invitation.invitedBy?.dairyId;
+
     const result = await prisma.$transaction(async (tx) => {
       // Create user with STAFF role
       const user = await tx.user.create({
         data: {
+          dairyId: dairyId || undefined,
           fullName: data.fullName,
           email: normalizedEmail,
           phone: normalizedPhone,
@@ -96,12 +104,25 @@ export async function POST(request) {
       // Create staff profile
       const profile = await tx.staffProfile.create({
         data: {
+          dairyId: dairyId || undefined,
           employeeCode,
           userId: user.id,
           jobTitle: data.jobTitle || 'Staff Member',
           department: data.department || null,
         },
       });
+
+      if (dairyId) {
+        await tx.dairyMembership.create({
+          data: {
+            dairyId,
+            userId: user.id,
+            role: 'STAFF',
+            isDefault: true,
+            isActive: true,
+          },
+        });
+      }
 
       // Mark invitation as used
       await tx.staffInvitation.update({
@@ -125,6 +146,7 @@ export async function POST(request) {
 
       await tx.auditLog.create({
         data: {
+          dairyId: dairyId || undefined,
           actorId: user.id,
           action: 'REGISTER_STAFF',
           entityType: 'StaffProfile',

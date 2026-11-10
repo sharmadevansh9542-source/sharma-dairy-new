@@ -1,3 +1,18 @@
 import './globals.css';
-export const metadata = { title: 'Sharma Dairy Management System', description: 'Milk collection, sales, stock and accounts management for Sharma Dairy.' };
-export default function RootLayout({ children }) { return <html lang="en"><body>{children}</body></html>; }
+import { PwaStatusBanner } from '@/components/pwa-status';
+
+export const metadata = {
+  title: 'Sharma Dairy — Multi-Tenant Dairy ERP & SaaS Platform',
+  description: 'Enterprise multi-tenant dairy operations, milk collection, billing, inventory, and accounting SaaS platform.',
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <PwaStatusBanner />
+      </body>
+    </html>
+  );
+}
