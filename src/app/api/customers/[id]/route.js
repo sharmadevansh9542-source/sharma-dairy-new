@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db/prisma';
 import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
+import { recordAdminEdit } from '@/lib/audit/edit-history';
 import { calculateOutstanding } from '@/lib/calculations/milk';
 
 export const runtime = 'nodejs';
@@ -105,7 +106,7 @@ export async function PATCH(req, { params }) {
         }
       }
 
-      return tx.customerProfile.update({
+      const saved = await tx.customerProfile.update({
         where: { id: existing.id },
         data: {
           address: address !== undefined ? address : undefined,
@@ -116,16 +117,34 @@ export async function PATCH(req, { params }) {
         },
         include: { user: { select: { id: true, fullName: true, phone: true, email: true, isActive: true } } },
       });
-    });
 
-    await tenantAudit({
-      actorId: context.user.id,
-      dairyId: context.dairyId,
-      action: 'UPDATE_CUSTOMER',
-      entityType: 'CustomerProfile',
-      entityId: updated.id,
-      before: existing,
-      after: updated,
+      await recordAdminEdit({
+        tx,
+        dairyId: context.dairyId,
+        recordType: 'CustomerProfile',
+        recordId: existing.id,
+        action: 'EDIT',
+        oldValues: {
+          fullName: existing.user?.fullName,
+          address: existing.address,
+          category: existing.category,
+          defaultRate: existing.defaultRate != null ? Number(existing.defaultRate) : null,
+          dailyRequirement: existing.dailyRequirement != null ? Number(existing.dailyRequirement) : null,
+          isActive: existing.isActive,
+        },
+        newValues: {
+          fullName: saved.user?.fullName,
+          address: saved.address,
+          category: saved.category,
+          defaultRate: saved.defaultRate != null ? Number(saved.defaultRate) : null,
+          dailyRequirement: saved.dailyRequirement != null ? Number(saved.dailyRequirement) : null,
+          isActive: saved.isActive,
+        },
+        reason: body.reason?.trim() || 'Customer profile updated by Admin',
+        performedBy: context.user,
+      });
+
+      return saved;
     });
 
     return NextResponse.json({ data: updated, message: 'Customer profile updated.' });

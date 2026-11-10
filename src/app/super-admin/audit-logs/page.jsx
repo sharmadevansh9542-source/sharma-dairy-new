@@ -10,9 +10,11 @@ import {
   Calendar,
 } from 'lucide-react';
 import { SuperAdminNav } from '@/components/super-admin-nav';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 export default function SuperAdminAuditLogsPage() {
   const [logs, setLogs] = useState([]);
+  const [selectedLog, setSelectedLog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
 
@@ -80,7 +82,11 @@ export default function SuperAdminAuditLogsPage() {
                   </tr>
                 ) : (
                   logs.map((l) => (
-                    <tr key={l.id} className="hover:bg-slate-50">
+                    <tr
+                      key={l.id}
+                      onClick={() => setSelectedLog(l)}
+                      className="cursor-pointer hover:bg-slate-50"
+                    >
                       <td className="p-3.5 text-slate-500 whitespace-nowrap">
                         {new Date(l.createdAt).toLocaleString('en-IN', {
                           day: 'numeric',
@@ -108,6 +114,29 @@ export default function SuperAdminAuditLogsPage() {
           </div>
         </div>
       </main>
+
+      <RecordDetailModal
+        open={Boolean(selectedLog)}
+        onClose={() => setSelectedLog(null)}
+        title="Platform Audit Event"
+        recordId={selectedLog?.entityId || selectedLog?.id}
+        recordCode={selectedLog?.id}
+        recordType={selectedLog?.entityType}
+        status={selectedLog?.action}
+        fetchAuditHistory={false}
+        fields={
+          selectedLog
+            ? [
+                { label: 'Action', value: selectedLog.action },
+                { label: 'Target Entity', value: selectedLog.entityType },
+                { label: 'Entity ID', value: selectedLog.entityId },
+                { label: 'IP Address', value: selectedLog.ipAddress },
+                { label: 'Timestamp', value: new Date(selectedLog.createdAt).toLocaleString('en-IN') },
+                { label: 'Details', value: selectedLog.details ? JSON.stringify(selectedLog.details) : null, fullWidth: true },
+              ]
+            : []
+        }
+      />
     </div>
   );
 }

@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { Settings, Plus, Calculator, CheckCircle2, AlertCircle } from 'lucide-react';
 import { resolveMilkRate } from '@/lib/calculations/milk';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 export default function AdminRateManager({ initialRates = [] }) {
   const [rates, setRates] = useState(initialRates);
+  const [selectedRate, setSelectedRate] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -261,7 +263,11 @@ export default function AdminRateManager({ initialRates = [] }) {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rates.map((r) => (
-              <tr key={r.id} className="hover:bg-slate-50">
+              <tr
+                key={r.id}
+                onClick={() => setSelectedRate(r)}
+                className="cursor-pointer hover:bg-slate-50"
+              >
                 <td className="p-3.5 font-bold text-slate-900">{r.milkType?.label || r.milkTypeId}</td>
                 <td className="p-3.5">{r.pricingMethod}</td>
                 <td className="p-3.5 font-semibold">
@@ -291,6 +297,43 @@ export default function AdminRateManager({ initialRates = [] }) {
           </p>
         )}
       </div>
+
+      <RecordDetailModal
+        open={Boolean(selectedRate)}
+        onClose={() => setSelectedRate(null)}
+        title="Milk Rate Policy Details"
+        recordId={selectedRate?.id}
+        recordType="MilkRate"
+        status={selectedRate ? (!selectedRate.effectiveTo ? 'ACTIVE' : 'INACTIVE') : null}
+        fields={
+          selectedRate
+            ? [
+                { label: 'Milk Type', value: selectedRate.milkType?.label || selectedRate.milkTypeId },
+                { label: 'Pricing Method', value: selectedRate.pricingMethod },
+                {
+                  label: 'Fixed Rate',
+                  value: selectedRate.fixedRate != null ? `₹${Number(selectedRate.fixedRate).toFixed(2)}/L` : null,
+                  highlight: true,
+                },
+                {
+                  label: 'Base Rate',
+                  value: selectedRate.baseRate != null ? `₹${Number(selectedRate.baseRate).toFixed(2)}/L` : null,
+                },
+                { label: 'Fat Multiplier', value: selectedRate.fatRate != null ? String(selectedRate.fatRate) : null },
+                { label: 'SNF Multiplier', value: selectedRate.snfRate != null ? String(selectedRate.snfRate) : null },
+                {
+                  label: 'Effective From',
+                  value: new Date(selectedRate.effectiveFrom).toLocaleString('en-IN'),
+                },
+                {
+                  label: 'Effective To',
+                  value: selectedRate.effectiveTo ? new Date(selectedRate.effectiveTo).toLocaleString('en-IN') : 'Currently Active',
+                },
+              ]
+            : []
+        }
+        auditMeta={selectedRate ? { createdAt: selectedRate.createdAt } : null}
+      />
     </div>
   );
 }

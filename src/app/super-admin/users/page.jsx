@@ -12,9 +12,11 @@ import {
   Filter,
 } from 'lucide-react';
 import { SuperAdminNav } from '@/components/super-admin-nav';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 export default function SuperAdminUsersPage() {
   const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
@@ -163,7 +165,11 @@ export default function SuperAdminUsersPage() {
                   </tr>
                 ) : (
                   users.map((u) => (
-                    <tr key={u.id} className="hover:bg-slate-50">
+                    <tr
+                      key={u.id}
+                      onClick={() => setSelectedUser(u)}
+                      className="cursor-pointer hover:bg-slate-50"
+                    >
                       <td className="p-3.5">
                         <span className="font-bold text-slate-900 block">{u.fullName}</span>
                         <span className="text-slate-500 text-[11px] block">{u.email || u.phone || 'No identifier'}</span>
@@ -202,7 +208,7 @@ export default function SuperAdminUsersPage() {
                       <td className="p-3.5 text-slate-500">
                         {new Date(u.createdAt).toLocaleDateString('en-IN')}
                       </td>
-                      <td className="p-3.5 text-right">
+                      <td className="p-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         {u.role !== 'SUPER_ADMIN' && (
                           <button
                             disabled={busyId === u.id}
@@ -225,6 +231,28 @@ export default function SuperAdminUsersPage() {
           </div>
         </div>
       </main>
+
+      <RecordDetailModal
+        open={Boolean(selectedUser)}
+        onClose={() => setSelectedUser(null)}
+        title="Platform User Account"
+        recordId={selectedUser?.id}
+        recordType="User"
+        status={selectedUser ? (selectedUser.isActive ? 'ACTIVE' : 'SUSPENDED') : null}
+        fields={
+          selectedUser
+            ? [
+                { label: 'Full Name', value: selectedUser.fullName },
+                { label: 'System Role', value: selectedUser.role },
+                { label: 'Email', value: selectedUser.email },
+                { label: 'Phone', value: selectedUser.phone },
+                { label: 'Dairy Tenant', value: selectedUser.dairyName },
+                { label: 'Dairy Code', value: selectedUser.dairyCode },
+              ]
+            : []
+        }
+        auditMeta={selectedUser ? { createdAt: selectedUser.createdAt } : null}
+      />
     </div>
   );
 }

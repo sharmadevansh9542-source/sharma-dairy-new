@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db/prisma';
-import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
+import { apiTenantUser } from '@/lib/auth/tenant';
+import { recordAdminEdit } from '@/lib/audit/edit-history';
 
 export const runtime = 'nodejs';
 
@@ -55,36 +56,54 @@ export async function PATCH(req) {
     const current = await prisma.dairy.findUnique({ where: { id: context.dairyId } });
     const currentSettings = (current?.settings && typeof current.settings === 'object') ? current.settings : {};
 
-    const updated = await prisma.dairy.update({
-      where: { id: context.dairyId },
-      data: {
-        name: d.name,
-        ownerName: d.ownerName,
-        email: d.email || null,
-        phone: d.phone || null,
-        address: d.address || null,
-        city: d.city || null,
-        state: d.state || null,
-        pincode: d.pincode || null,
-        logoUrl: d.logoUrl || null,
-        settings: {
-          ...currentSettings,
-          invoiceHeader: d.invoiceHeader || '',
-          invoiceFooter: d.invoiceFooter || '',
-          whatsappEnabled: Boolean(d.whatsappEnabled),
-          autoInvoicing: Boolean(d.autoInvoicing),
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.dairy.update({
+        where: { id: context.dairyId },
+        data: {
+          name: d.name,
+          ownerName: d.ownerName,
+          email: d.email || null,
+          phone: d.phone || null,
+          address: d.address || null,
+          city: d.city || null,
+          state: d.state || null,
+          pincode: d.pincode || null,
+          logoUrl: d.logoUrl || null,
+          settings: {
+            ...currentSettings,
+            invoiceHeader: d.invoiceHeader || '',
+            invoiceFooter: d.invoiceFooter || '',
+            whatsappEnabled: Boolean(d.whatsappEnabled),
+            autoInvoicing: Boolean(d.autoInvoicing),
+          },
         },
-      },
-    });
+      });
 
-    await tenantAudit({
-      actorId: context.user.id,
-      dairyId: context.dairyId,
-      action: 'UPDATE_DAIRY_SETTINGS',
-      entityType: 'Dairy',
-      entityId: updated.id,
-      before: current,
-      after: updated,
+      await recordAdminEdit({
+        tx,
+        dairyId: context.dairyId,
+        recordType: 'Dairy',
+        recordId: saved.id,
+        action: 'EDIT',
+        oldValues: {
+          name: current?.name,
+          ownerName: current?.ownerName,
+          email: current?.email,
+          phone: current?.phone,
+          city: current?.city,
+        },
+        newValues: {
+          name: saved.name,
+          ownerName: saved.ownerName,
+          email: saved.email,
+          phone: saved.phone,
+          city: saved.city,
+        },
+        reason: body.reason?.trim() || 'Dairy business settings updated by Admin',
+        performedBy: context.user,
+      });
+
+      return saved;
     });
 
     return NextResponse.json({ data: updated, message: 'Dairy business branding & settings saved!' });

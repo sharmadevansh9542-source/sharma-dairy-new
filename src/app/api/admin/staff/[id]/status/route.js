@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
+import { apiTenantUser } from '@/lib/auth/tenant';
+import { recordAdminEdit } from '@/lib/audit/edit-history';
 
 export const runtime = 'nodejs';
 
@@ -43,16 +44,18 @@ export async function PATCH(request, { params }) {
           where: { userId: id },
         });
       }
-    });
 
-    await tenantAudit({
-      actorId: context.user.id,
-      dairyId: context.dairyId,
-      action: isActive ? 'ACTIVATE_STAFF' : 'SUSPEND_STAFF',
-      entityType: 'User',
-      entityId: id,
-      before: { isActive: staffUser.isActive },
-      after: { isActive },
+      await recordAdminEdit({
+        tx,
+        dairyId: context.dairyId,
+        recordType: 'User',
+        recordId: id,
+        action: isActive ? 'ACTIVATE' : 'SUSPEND',
+        oldValues: { isActive: staffUser.isActive },
+        newValues: { isActive },
+        reason: body.reason?.trim() || `Staff account ${isActive ? 'activated' : 'suspended'} by Admin`,
+        performedBy: context.user,
+      });
     });
 
     return NextResponse.json({

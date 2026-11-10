@@ -10,6 +10,7 @@ import {
   TrendingUp,
   ArrowRight,
   ClipboardList,
+  ClipboardCheck,
 } from 'lucide-react';
 import { getTenantContext } from '@/lib/auth/tenant';
 import { prisma } from '@/lib/db/prisma';
@@ -60,6 +61,7 @@ export default async function AdminDashboard() {
     weekCollections,
     weekSales,
     milkTypes,
+    pendingMilkEntries,
   ] = await Promise.all([
     prisma.farmerProfile.count({ where: { dairyId, isActive: true } }),
     prisma.customerProfile.count({ where: { dairyId, isActive: true } }),
@@ -114,6 +116,7 @@ export default async function AdminDashboard() {
       select: { saleAt: true, quantityLitres: true },
     }),
     prisma.milkTypeConfig.findMany(),
+    prisma.milkEntry.count({ where: { dairyId, status: 'PENDING_VERIFICATION' } }),
   ]);
 
   const monthlyRev = Number(monthSales._sum.amount || 0);
@@ -183,6 +186,28 @@ export default async function AdminDashboard() {
   return (
     <AdminLayout active="dashboard">
       <div className="space-y-6">
+        <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50/70 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="rounded-xl bg-amber-100 p-2.5 text-amber-800">
+              <ClipboardCheck size={20} />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">
+                Milk Verification Queue ({pendingMilkEntries} pending)
+              </h2>
+              <p className="text-xs text-slate-600">
+                Review daily milk entries submitted by farmers and customers, approve deliveries, or apply audited corrections.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/admin/milk-verification"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-green-800 px-4 py-2 text-xs font-semibold text-white hover:bg-green-900"
+          >
+            Open Milk Verification <ArrowRight size={14} />
+          </Link>
+        </section>
+
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {cards.map((c) => {
             const Icon = c.icon;

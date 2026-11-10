@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { Receipt, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
 import { SuperAdminNav } from '@/components/super-admin-nav';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 export default function SuperAdminPaymentsPage() {
   const [payments, setPayments] = useState([]);
+  const [selectedPayment, setSelectedPayment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
 
@@ -87,7 +89,11 @@ export default function SuperAdminPaymentsPage() {
                   </tr>
                 ) : (
                   payments.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50">
+                    <tr
+                      key={p.id}
+                      onClick={() => setSelectedPayment(p)}
+                      className="cursor-pointer hover:bg-slate-50"
+                    >
                       <td className="p-3.5">
                         <span className="font-mono font-bold text-slate-900 block">{p.invoiceNumber || p.id}</span>
                         <span className="text-[11px] text-slate-400">Ref: {p.transactionRef || '—'}</span>
@@ -104,7 +110,7 @@ export default function SuperAdminPaymentsPage() {
                           {p.status}
                         </span>
                       </td>
-                      <td className="p-3.5 text-right space-x-2">
+                      <td className="p-3.5 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
                         {p.status !== 'COMPLETED' && (
                           <button
                             onClick={() => updateStatus(p.id, 'COMPLETED')}
@@ -122,6 +128,29 @@ export default function SuperAdminPaymentsPage() {
           </div>
         </div>
       </main>
+
+      <RecordDetailModal
+        open={Boolean(selectedPayment)}
+        onClose={() => setSelectedPayment(null)}
+        title="SaaS Subscription Payment"
+        recordId={selectedPayment?.id}
+        recordCode={selectedPayment?.invoiceNumber || selectedPayment?.id}
+        recordType="SubscriptionPayment"
+        status={selectedPayment?.status}
+        fetchAuditHistory={false}
+        fields={
+          selectedPayment
+            ? [
+                { label: 'Invoice Number', value: selectedPayment.invoiceNumber },
+                { label: 'Dairy Business', value: `${selectedPayment.dairyName} (${selectedPayment.dairyCode})` },
+                { label: 'Plan', value: selectedPayment.planName },
+                { label: 'Amount', value: `₹${Number(selectedPayment.amount || 0).toLocaleString('en-IN')}`, highlight: true },
+                { label: 'Payment Method', value: selectedPayment.method },
+                { label: 'Transaction Ref', value: selectedPayment.transactionRef },
+              ]
+            : []
+        }
+      />
     </div>
   );
 }

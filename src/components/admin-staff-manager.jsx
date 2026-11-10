@@ -17,6 +17,7 @@ import {
   KeyRound,
   ExternalLink,
 } from 'lucide-react';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 const MANAGER_PRESETS = {
   STAFF: { label: 'Operations Staff', perms: ['collection.create', 'sale.create'] },
@@ -41,6 +42,7 @@ const PERMISSION_LABELS = [
 
 export default function AdminStaffManager({ initialStaff = [], initialInvitations = [] }) {
   const [activeTab, setActiveTab] = useState('staff'); // 'staff' | 'invite' | 'invitations'
+  const [selectedStaff, setSelectedStaff] = useState(null);
   const [staffList, setStaffList] = useState(initialStaff);
   const [invitations, setInvitations] = useState(initialInvitations);
 
@@ -289,7 +291,11 @@ export default function AdminStaffManager({ initialStaff = [], initialInvitation
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredStaff.map((staff) => (
-                  <tr key={staff.id} className="hover:bg-slate-50/80 transition">
+                  <tr
+                    key={staff.id}
+                    onClick={() => setSelectedStaff(staff)}
+                    className="cursor-pointer hover:bg-slate-50/80 transition"
+                  >
                     <td className="p-3.5">
                       <div className="font-bold text-slate-900">{staff.fullName}</div>
                       <div className="text-xs text-slate-400">
@@ -321,7 +327,7 @@ export default function AdminStaffManager({ initialStaff = [], initialInvitation
                         </span>
                       )}
                     </td>
-                    <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
+                    <td className="p-3.5 text-right space-x-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => openPermissionsModal(staff)}
                         className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
@@ -608,6 +614,43 @@ export default function AdminStaffManager({ initialStaff = [], initialInvitation
           </div>
         </div>
       )}
+
+      <RecordDetailModal
+        open={Boolean(selectedStaff)}
+        onClose={() => setSelectedStaff(null)}
+        title="Staff Member Profile & Permissions"
+        recordId={selectedStaff?.id}
+        recordCode={selectedStaff?.staffProfile?.employeeCode || selectedStaff?.id}
+        recordType="User"
+        status={selectedStaff ? (selectedStaff.isActive ? 'ACTIVE' : 'SUSPENDED') : null}
+        fields={
+          selectedStaff
+            ? [
+                { label: 'Full Name', value: selectedStaff.fullName },
+                { label: 'Employee Code', value: selectedStaff.staffProfile?.employeeCode },
+                { label: 'Role / Title', value: selectedStaff.staffProfile?.managerRole || selectedStaff.staffProfile?.jobTitle },
+                { label: 'Department', value: selectedStaff.staffProfile?.department },
+                { label: 'Mobile', value: selectedStaff.phone },
+                { label: 'Email', value: selectedStaff.email },
+                {
+                  label: 'Permissions',
+                  value: (selectedStaff.permissionKeys || []).join(', ') || 'None granted',
+                  fullWidth: true,
+                },
+              ]
+            : []
+        }
+        auditMeta={selectedStaff ? { createdAt: selectedStaff.createdAt } : null}
+        onEdit={
+          selectedStaff
+            ? () => {
+                const target = selectedStaff;
+                setSelectedStaff(null);
+                openPermissionsModal(target);
+              }
+            : null
+        }
+      />
     </div>
   );
 }

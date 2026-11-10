@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import { Boxes, Plus, CheckCircle2, AlertCircle } from 'lucide-react';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 export default function AdminStockManager({ initialTypes = [], initialTotals = [], initialMovements = [] }) {
   const [types, setTypes] = useState(initialTypes);
   const [movements, setMovements] = useState(initialMovements);
+  const [selectedMovement, setSelectedMovement] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [milkType, setMilkType] = useState('COW');
   const [movementType, setMovementType] = useState('LOSS');
@@ -175,7 +177,11 @@ export default function AdminStockManager({ initialTypes = [], initialTotals = [
           </thead>
           <tbody className="divide-y divide-slate-100">
             {movements.map((m) => (
-              <tr key={m.id} className="hover:bg-slate-50">
+              <tr
+                key={m.id}
+                onClick={() => setSelectedMovement(m)}
+                className="cursor-pointer hover:bg-slate-50"
+              >
                 <td className="p-3.5">{new Date(m.movementAt).toLocaleString('en-IN')}</td>
                 <td className="p-3.5 font-semibold">{m.milkType?.label || 'Milk'}</td>
                 <td className="p-3.5">{m.movementType}</td>
@@ -189,6 +195,36 @@ export default function AdminStockManager({ initialTypes = [], initialTotals = [
         </table>
         {!movements.length && <p className="p-8 text-center text-xs text-slate-500">No stock movements recorded yet.</p>}
       </div>
+
+      <RecordDetailModal
+        open={Boolean(selectedMovement)}
+        onClose={() => setSelectedMovement(null)}
+        title="Raw Milk Stock Movement"
+        recordId={selectedMovement?.id}
+        recordType="StockMovement"
+        status={selectedMovement?.movementType}
+        fields={
+          selectedMovement
+            ? [
+                { label: 'Milk Type', value: selectedMovement.milkType?.label || 'Milk' },
+                { label: 'Movement Type', value: selectedMovement.movementType },
+                {
+                  label: 'Quantity Delta',
+                  value: `${Number(selectedMovement.quantityLitres) > 0 ? '+' : ''}${selectedMovement.quantityLitres} Litres`,
+                  highlight: true,
+                },
+                { label: 'Reference Type', value: selectedMovement.referenceType },
+                { label: 'Reference ID', value: selectedMovement.referenceId },
+                {
+                  label: 'Movement Time',
+                  value: new Date(selectedMovement.movementAt).toLocaleString('en-IN'),
+                },
+                { label: 'Notes', value: selectedMovement.notes, fullWidth: true },
+              ]
+            : []
+        }
+        auditMeta={selectedMovement ? { createdAt: selectedMovement.createdAt } : null}
+      />
     </div>
   );
 }

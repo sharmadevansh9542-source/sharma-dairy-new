@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { BookOpen, Landmark, Wallet, Plus, CheckCircle2, AlertCircle, TrendingUp } from 'lucide-react';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 const money = (v) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(
@@ -10,6 +11,7 @@ const money = (v) =>
 
 export default function AdminAccountingView({ initialData }) {
   const [data, setData] = useState(initialData);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -219,7 +221,11 @@ export default function AdminAccountingView({ initialData }) {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {(data.accounts || []).map((a) => (
-                <tr key={a.id} className="hover:bg-slate-50">
+                <tr
+                  key={a.id}
+                  onClick={() => setSelectedAccount(a)}
+                  className="cursor-pointer hover:bg-slate-50"
+                >
                   <td className="p-3 font-mono font-bold text-slate-700">{a.code}</td>
                   <td className="p-3 font-semibold text-slate-900">{a.name}</td>
                   <td className="p-3 text-[11px] text-slate-500">{a.type}</td>
@@ -253,6 +259,27 @@ export default function AdminAccountingView({ initialData }) {
           </div>
         </div>
       </div>
+
+      <RecordDetailModal
+        open={Boolean(selectedAccount)}
+        onClose={() => setSelectedAccount(null)}
+        title="Chart of Accounts Ledger"
+        recordId={selectedAccount?.id}
+        recordCode={selectedAccount?.code}
+        recordType="Account"
+        status="ACTIVE"
+        fields={
+          selectedAccount
+            ? [
+                { label: 'Account Code', value: selectedAccount.code },
+                { label: 'Account Name', value: selectedAccount.name },
+                { label: 'Account Type', value: selectedAccount.type },
+                { label: 'System Account', value: selectedAccount.isSystem ? 'Yes' : 'No' },
+                { label: 'Manual Ledger Balance', value: money(selectedAccount.balance), highlight: true },
+              ]
+            : []
+        }
+      />
     </div>
   );
 }

@@ -23,9 +23,12 @@ import {
   MapPin,
   Clock,
   FileText,
+  PlusCircle,
 } from 'lucide-react';
 import DigitalIdCard from '@/components/digital-id-card';
 import NotificationBell from '@/components/notification-bell';
+import MilkEntryPanel from '@/components/milk-entry-panel';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 const formatMoney = (val) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(val || 0));
@@ -42,6 +45,7 @@ export default function CustomerDashboardView({
   initialDeliveries = [],
 }) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [detailModal, setDetailModal] = useState(null);
   const [subscriptions, setSubscriptions] = useState(initialSubscriptions);
   const [subBusyId, setSubBusyId] = useState(null);
 
@@ -112,6 +116,7 @@ export default function CustomerDashboardView({
 
   const navItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'milk-entry', label: 'Add Milk Entry', icon: PlusCircle },
     { id: 'orders', label: 'My Orders & Deliveries', icon: ShoppingBag },
     { id: 'subscription', label: 'Daily Delivery Plan', icon: Package },
     { id: 'payments', label: 'Payments & Invoices', icon: Receipt },
@@ -320,7 +325,29 @@ export default function CustomerDashboardView({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {sales.slice(0, 5).map((sale) => (
-                      <tr key={sale.id} className="hover:bg-slate-50/80">
+                      <tr
+                        key={sale.id}
+                        onClick={() =>
+                          setDetailModal({
+                            title: 'Milk Delivery / Order Details',
+                            recordId: sale.id,
+                            recordCode: sale.saleCode || sale.id,
+                            recordType: 'Sale',
+                            status: sale.status,
+                            fields: [
+                              { label: 'Delivery Date', value: new Date(sale.saleAt).toLocaleString('en-IN') },
+                              { label: 'Milk Type / Item', value: sale.milkType?.label || sale.product?.name || 'Milk' },
+                              { label: 'Quantity', value: `${Number(sale.quantityLitres).toFixed(2)} Litres`, highlight: true },
+                              { label: 'Rate / L', value: `₹${Number(sale.ratePerLitre).toFixed(2)}` },
+                              { label: 'Total Amount', value: formatMoney(sale.amount), highlight: true },
+                              { label: 'Payment Status', value: sale.paymentStatus },
+                              { label: 'Notes', value: sale.notes, fullWidth: true },
+                            ],
+                            auditMeta: { createdAt: sale.saleAt },
+                          })
+                        }
+                        className="cursor-pointer hover:bg-slate-50/80"
+                      >
                         <td className="p-3 font-medium text-slate-800">
                           {new Date(sale.saleAt).toLocaleDateString('en-IN', {
                             dateStyle: 'medium',
@@ -356,7 +383,23 @@ export default function CustomerDashboardView({
                 </table>
               </div>
             </div>
+
+            {/* Customer Milk Entry Form & History */}
+            <MilkEntryPanel
+              roleLabel="Customer"
+              defaultMilkType={profile?.defaultMilkType || 'COW'}
+              showQualityFields={false}
+            />
           </div>
+        )}
+
+        {/* DEDICATED CUSTOMER MILK ENTRY TAB */}
+        {activeTab === 'milk-entry' && (
+          <MilkEntryPanel
+            roleLabel="Customer"
+            defaultMilkType={profile?.defaultMilkType || 'COW'}
+            showQualityFields={false}
+          />
         )}
 
         {/* TAB 2: MY ORDERS & DELIVERIES */}
@@ -387,7 +430,29 @@ export default function CustomerDashboardView({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {sales.map((sale) => (
-                    <tr key={sale.id} className="hover:bg-slate-50/80 transition">
+                    <tr
+                      key={sale.id}
+                      onClick={() =>
+                        setDetailModal({
+                          title: 'Milk Delivery / Order Details',
+                          recordId: sale.id,
+                          recordCode: sale.saleCode || sale.id,
+                          recordType: 'Sale',
+                          status: sale.status,
+                          fields: [
+                            { label: 'Delivery Date', value: new Date(sale.saleAt).toLocaleString('en-IN') },
+                            { label: 'Milk Type / Item', value: sale.milkType?.label || sale.product?.name || 'Milk' },
+                            { label: 'Quantity', value: `${Number(sale.quantityLitres).toFixed(2)} Litres`, highlight: true },
+                            { label: 'Rate / L', value: `₹${Number(sale.ratePerLitre).toFixed(2)}` },
+                            { label: 'Total Amount', value: formatMoney(sale.amount), highlight: true },
+                            { label: 'Payment Status', value: sale.paymentStatus },
+                            { label: 'Notes', value: sale.notes, fullWidth: true },
+                          ],
+                          auditMeta: { createdAt: sale.saleAt },
+                        })
+                      }
+                      className="cursor-pointer hover:bg-slate-50/80 transition"
+                    >
                       <td className="p-3.5 font-mono text-xs text-slate-500">{sale.saleCode || sale.id.slice(0, 8)}</td>
                       <td className="p-3.5 font-medium text-slate-800">
                         {new Date(sale.saleAt).toLocaleString('en-IN', {
@@ -495,7 +560,28 @@ export default function CustomerDashboardView({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {payments.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50/80 transition">
+                      <tr
+                        key={p.id}
+                        onClick={() =>
+                          setDetailModal({
+                            title: 'Customer Payment Receipt',
+                            recordId: p.id,
+                            recordCode: p.paymentCode || p.id,
+                            recordType: 'CustomerPayment',
+                            status: 'COMPLETED',
+                            fields: [
+                              { label: 'Payment Code', value: p.paymentCode },
+                              { label: 'Paid Date', value: new Date(p.paidAt).toLocaleString('en-IN') },
+                              { label: 'Method', value: p.method },
+                              { label: 'Amount Paid', value: formatMoney(p.amount), highlight: true },
+                              { label: 'Reference', value: p.reference },
+                              { label: 'Notes', value: p.notes, fullWidth: true },
+                            ],
+                            auditMeta: { createdAt: p.paidAt },
+                          })
+                        }
+                        className="cursor-pointer hover:bg-slate-50/80 transition"
+                      >
                         <td className="p-3.5 font-mono text-xs font-semibold text-slate-700">
                           {p.paymentCode}
                         </td>
@@ -662,6 +748,19 @@ export default function CustomerDashboardView({
           </div>
         )}
       </main>
+
+      <RecordDetailModal
+        open={Boolean(detailModal)}
+        onClose={() => setDetailModal(null)}
+        title={detailModal?.title}
+        recordId={detailModal?.recordId}
+        recordCode={detailModal?.recordCode}
+        recordType={detailModal?.recordType}
+        status={detailModal?.status}
+        fields={detailModal?.fields || []}
+        auditMeta={detailModal?.auditMeta}
+        fetchAuditHistory={false}
+      />
     </div>
   );
 }

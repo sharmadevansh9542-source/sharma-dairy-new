@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
+import { recordAdminEdit } from '@/lib/audit/edit-history';
 import { calculateOutstanding } from '@/lib/calculations/milk';
 
 export const runtime = 'nodejs';
@@ -102,7 +103,7 @@ export async function PATCH(req, { params }) {
         }
       }
 
-      return tx.farmerProfile.update({
+      const saved = await tx.farmerProfile.update({
         where: { id: existing.id },
         data: {
           village: village !== undefined ? village : undefined,
@@ -112,16 +113,32 @@ export async function PATCH(req, { params }) {
         },
         include: { user: { select: { id: true, fullName: true, phone: true, email: true, isActive: true } } },
       });
-    });
 
-    await tenantAudit({
-      actorId: context.user.id,
-      dairyId: context.dairyId,
-      action: 'UPDATE_FARMER',
-      entityType: 'FarmerProfile',
-      entityId: updated.id,
-      before: existing,
-      after: updated,
+      await recordAdminEdit({
+        tx,
+        dairyId: context.dairyId,
+        recordType: 'FarmerProfile',
+        recordId: existing.id,
+        action: 'EDIT',
+        oldValues: {
+          fullName: existing.user?.fullName,
+          village: existing.village,
+          address: existing.address,
+          animalType: existing.animalType,
+          isActive: existing.isActive,
+        },
+        newValues: {
+          fullName: saved.user?.fullName,
+          village: saved.village,
+          address: saved.address,
+          animalType: saved.animalType,
+          isActive: saved.isActive,
+        },
+        reason: body.reason?.trim() || 'Farmer profile updated by Admin',
+        performedBy: context.user,
+      });
+
+      return saved;
     });
 
     return NextResponse.json({ data: updated, message: 'Farmer profile updated.' });

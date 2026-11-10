@@ -10,12 +10,14 @@ import {
   AlertCircle,
   ShoppingCart,
 } from 'lucide-react';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 export default function AdminProductsManager({ initialProducts = [], initialSuppliers = [], initialPurchases = [] }) {
   const [tab, setTab] = useState('products');
   const [products, setProducts] = useState(initialProducts);
   const [suppliers, setSuppliers] = useState(initialSuppliers);
   const [purchases, setPurchases] = useState(initialPurchases);
+  const [selectedDetail, setSelectedDetail] = useState(null);
   const [showProductForm, setShowProductForm] = useState(false);
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
@@ -492,7 +494,30 @@ export default function AdminProductsManager({ initialProducts = [], initialSupp
               {products.map((p) => {
                 const isLow = Number(p.currentStock) <= Number(p.minStockAlert);
                 return (
-                  <tr key={p.id} className="hover:bg-slate-50">
+                  <tr
+                    key={p.id}
+                    onClick={() =>
+                      setSelectedDetail({
+                        title: 'Packaged Product Details',
+                        recordId: p.id,
+                        recordCode: p.sku,
+                        recordType: 'Product',
+                        status: isLow ? 'PAUSED' : 'ACTIVE',
+                        fields: [
+                          { label: 'SKU Code', value: p.sku },
+                          { label: 'Product Name', value: p.name },
+                          { label: 'Category', value: p.category },
+                          { label: 'Unit', value: p.unit },
+                          { label: 'Purchase Price', value: `₹${Number(p.purchasePrice).toFixed(2)}` },
+                          { label: 'Selling Price', value: `₹${Number(p.sellingPrice).toFixed(2)}`, highlight: true },
+                          { label: 'Current Stock', value: `${Number(p.currentStock)} ${p.unit}`, highlight: true },
+                          { label: 'Min Alert Threshold', value: `${Number(p.minStockAlert)} ${p.unit}` },
+                        ],
+                        auditMeta: { createdAt: p.createdAt, updatedAt: p.updatedAt },
+                      })
+                    }
+                    className="cursor-pointer hover:bg-slate-50"
+                  >
                     <td className="p-3.5">
                       <span className="font-bold text-slate-900 block">{p.name}</span>
                       <span className="font-mono text-[10px] text-slate-400">{p.sku}</span>
@@ -541,7 +566,27 @@ export default function AdminProductsManager({ initialProducts = [], initialSupp
             </thead>
             <tbody className="divide-y divide-slate-100">
               {suppliers.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50">
+                <tr
+                  key={s.id}
+                  onClick={() =>
+                    setSelectedDetail({
+                      title: 'Supplier Details',
+                      recordId: s.id,
+                      recordType: 'Supplier',
+                      status: 'ACTIVE',
+                      fields: [
+                        { label: 'Supplier Name', value: s.name },
+                        { label: 'Contact Person', value: s.contactPerson },
+                        { label: 'Phone', value: s.phone },
+                        { label: 'City', value: s.city },
+                        { label: 'GSTIN', value: s.gstin },
+                        { label: 'Total Orders', value: String(s._count?.purchases || 0) },
+                      ],
+                      auditMeta: { createdAt: s.createdAt, updatedAt: s.updatedAt },
+                    })
+                  }
+                  className="cursor-pointer hover:bg-slate-50"
+                >
                   <td className="p-3.5 font-bold text-slate-900">{s.name}</td>
                   <td className="p-3.5">{s.contactPerson || '—'}</td>
                   <td className="p-3.5">
@@ -572,7 +617,31 @@ export default function AdminProductsManager({ initialProducts = [], initialSupp
             </thead>
             <tbody className="divide-y divide-slate-100">
               {purchases.map((po) => (
-                <tr key={po.id} className="hover:bg-slate-50">
+                <tr
+                  key={po.id}
+                  onClick={() =>
+                    setSelectedDetail({
+                      title: 'Purchase Order Details',
+                      recordId: po.id,
+                      recordCode: po.purchaseCode,
+                      recordType: 'Purchase',
+                      status: po.paymentStatus,
+                      fields: [
+                        { label: 'PO Code', value: po.purchaseCode },
+                        { label: 'Supplier', value: po.supplier?.name },
+                        { label: 'Purchase Date', value: new Date(po.purchaseDate).toLocaleDateString('en-IN') },
+                        { label: 'Total Amount', value: `₹${Number(po.totalAmount).toLocaleString('en-IN')}`, highlight: true },
+                        {
+                          label: 'Purchased Items',
+                          value: po.items?.map((i) => `${i.product?.name} (${Number(i.quantity)} ${i.product?.unit})`).join(', '),
+                          fullWidth: true,
+                        },
+                      ],
+                      auditMeta: { createdAt: po.createdAt, updatedAt: po.updatedAt },
+                    })
+                  }
+                  className="cursor-pointer hover:bg-slate-50"
+                >
                   <td className="p-3.5 font-mono font-bold text-slate-900">{po.purchaseCode}</td>
                   <td className="p-3.5">{new Date(po.purchaseDate).toLocaleDateString('en-IN')}</td>
                   <td className="p-3.5 font-semibold">{po.supplier?.name}</td>
@@ -592,6 +661,18 @@ export default function AdminProductsManager({ initialProducts = [], initialSupp
           {purchases.length === 0 && <p className="p-8 text-center text-xs text-slate-500">No purchase orders recorded yet.</p>}
         </div>
       )}
+
+      <RecordDetailModal
+        open={Boolean(selectedDetail)}
+        onClose={() => setSelectedDetail(null)}
+        title={selectedDetail?.title}
+        recordId={selectedDetail?.recordId}
+        recordCode={selectedDetail?.recordCode}
+        recordType={selectedDetail?.recordType}
+        status={selectedDetail?.status}
+        fields={selectedDetail?.fields || []}
+        auditMeta={selectedDetail?.auditMeta}
+      />
     </div>
   );
 }

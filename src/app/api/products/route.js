@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db/prisma';
 import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
+import { recordAdminEdit } from '@/lib/audit/edit-history';
 
 export const runtime = 'nodejs';
 
@@ -86,24 +87,40 @@ export async function PATCH(req) {
     const existing = await prisma.product.findFirst({ where: { id, dairyId: context.dairyId } });
     if (!existing) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
 
-    const updated = await prisma.product.update({
-      where: { id: existing.id },
-      data: {
-        currentStock: currentStock != null ? Number(currentStock) : undefined,
-        sellingPrice: sellingPrice != null ? Number(sellingPrice) : undefined,
-        purchasePrice: purchasePrice != null ? Number(purchasePrice) : undefined,
-        isActive: typeof isActive === 'boolean' ? isActive : undefined,
-      },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.product.update({
+        where: { id: existing.id },
+        data: {
+          currentStock: currentStock != null ? Number(currentStock) : undefined,
+          sellingPrice: sellingPrice != null ? Number(sellingPrice) : undefined,
+          purchasePrice: purchasePrice != null ? Number(purchasePrice) : undefined,
+          isActive: typeof isActive === 'boolean' ? isActive : undefined,
+        },
+      });
 
-    await tenantAudit({
-      actorId: context.user.id,
-      dairyId: context.dairyId,
-      action: 'UPDATE_PRODUCT',
-      entityType: 'Product',
-      entityId: updated.id,
-      before: existing,
-      after: updated,
+      await recordAdminEdit({
+        tx,
+        dairyId: context.dairyId,
+        recordType: 'Product',
+        recordId: existing.id,
+        action: 'EDIT',
+        oldValues: {
+          currentStock: Number(existing.currentStock),
+          sellingPrice: Number(existing.sellingPrice),
+          purchasePrice: Number(existing.purchasePrice),
+          isActive: existing.isActive,
+        },
+        newValues: {
+          currentStock: Number(saved.currentStock),
+          sellingPrice: Number(saved.sellingPrice),
+          purchasePrice: Number(saved.purchasePrice),
+          isActive: saved.isActive,
+        },
+        reason: body.reason?.trim() || 'Product inventory/pricing updated by Admin',
+        performedBy: context.user,
+      });
+
+      return saved;
     });
 
     return NextResponse.json({ data: updated, message: 'Product updated.' });

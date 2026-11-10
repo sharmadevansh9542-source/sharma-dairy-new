@@ -12,10 +12,12 @@ import {
   Calendar,
   AlertCircle,
 } from 'lucide-react';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 export default function AdminSubscriptionsManager({ initialSubs = [], initialDeliveries = [], customers = [] }) {
   const [subs, setSubs] = useState(initialSubs);
   const [deliveries, setDeliveries] = useState(initialDeliveries);
+  const [selectedDetail, setSelectedDetail] = useState(null);
   const [tab, setTab] = useState('deliveries');
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -289,7 +291,27 @@ export default function AdminSubscriptionsManager({ initialSubs = [], initialDel
             </thead>
             <tbody className="divide-y divide-slate-100">
               {deliveries.map((d) => (
-                <tr key={d.id} className="hover:bg-slate-50">
+                <tr
+                  key={d.id}
+                  onClick={() =>
+                    setSelectedDetail({
+                      title: 'Daily Route Delivery',
+                      recordId: d.id,
+                      recordType: 'DailyDelivery',
+                      status: d.status,
+                      fields: [
+                        { label: 'Delivery Date', value: new Date(d.deliveryDate).toLocaleDateString('en-IN') },
+                        { label: 'Shift', value: d.shift },
+                        { label: 'Customer', value: d.customer?.user?.fullName },
+                        { label: 'Phone', value: d.customer?.user?.phone },
+                        { label: 'Milk Type', value: d.subscription?.milkType || 'COW' },
+                        { label: 'Quantity', value: `${Number(d.quantityLitres)} Litres`, highlight: true },
+                        { label: 'Notes', value: d.notes, fullWidth: true },
+                      ],
+                    })
+                  }
+                  className="cursor-pointer hover:bg-slate-50"
+                >
                   <td className="p-3.5">
                     <span className="font-bold text-slate-900 block">
                       {new Date(d.deliveryDate).toLocaleDateString('en-IN')}
@@ -315,7 +337,7 @@ export default function AdminSubscriptionsManager({ initialSubs = [], initialDel
                       {d.status}
                     </span>
                   </td>
-                  <td className="p-3.5 text-right">
+                  <td className="p-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                     {d.status === 'PENDING' && (
                       <div className="flex justify-end gap-2">
                         <button
@@ -361,7 +383,28 @@ export default function AdminSubscriptionsManager({ initialSubs = [], initialDel
             </thead>
             <tbody className="divide-y divide-slate-100">
               {subs.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50">
+                <tr
+                  key={s.id}
+                  onClick={() =>
+                    setSelectedDetail({
+                      title: 'Milk Subscription Plan',
+                      recordId: s.id,
+                      recordType: 'MilkSubscription',
+                      status: s.status,
+                      fields: [
+                        { label: 'Customer', value: s.customer?.user?.fullName },
+                        { label: 'Milk Type', value: s.milkType },
+                        { label: 'Daily Quantity', value: `${Number(s.dailyQuantity)} Litres`, highlight: true },
+                        { label: 'Rate / Litre', value: `₹${Number(s.ratePerLitre).toFixed(2)}` },
+                        { label: 'Delivery Shift', value: s.deliveryShift },
+                        { label: 'Start Date', value: new Date(s.startDate).toLocaleDateString('en-IN') },
+                        { label: 'Notes', value: s.notes, fullWidth: true },
+                      ],
+                      auditMeta: { createdAt: s.createdAt, updatedAt: s.updatedAt },
+                    })
+                  }
+                  className="cursor-pointer hover:bg-slate-50"
+                >
                   <td className="p-3.5 font-bold text-slate-900">{s.customer?.user?.fullName}</td>
                   <td className="p-3.5">{s.milkType}</td>
                   <td className="p-3.5 font-bold">{Number(s.dailyQuantity)} L</td>
@@ -380,7 +423,7 @@ export default function AdminSubscriptionsManager({ initialSubs = [], initialDel
                       {s.status}
                     </span>
                   </td>
-                  <td className="p-3.5 text-right space-x-2">
+                  <td className="p-3.5 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
                     {s.status === 'ACTIVE' && (
                       <button
                         disabled={busy}
@@ -418,6 +461,17 @@ export default function AdminSubscriptionsManager({ initialSubs = [], initialDel
           )}
         </div>
       )}
+
+      <RecordDetailModal
+        open={Boolean(selectedDetail)}
+        onClose={() => setSelectedDetail(null)}
+        title={selectedDetail?.title}
+        recordId={selectedDetail?.recordId}
+        recordType={selectedDetail?.recordType}
+        status={selectedDetail?.status}
+        fields={selectedDetail?.fields || []}
+        auditMeta={selectedDetail?.auditMeta}
+      />
     </div>
   );
 }

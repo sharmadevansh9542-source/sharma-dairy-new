@@ -15,9 +15,11 @@ import {
   Filter,
 } from 'lucide-react';
 import { SuperAdminNav } from '@/components/super-admin-nav';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 export default function SuperAdminDairiesPage() {
   const [dairies, setDairies] = useState([]);
+  const [selectedDairy, setSelectedDairy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -163,7 +165,11 @@ export default function SuperAdminDairiesPage() {
                   </tr>
                 ) : (
                   dairies.map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-50/70 transition">
+                    <tr
+                      key={d.id}
+                      onClick={() => setSelectedDairy(d)}
+                      className="cursor-pointer hover:bg-slate-50/70 transition"
+                    >
                       <td className="p-4">
                         <div className="flex items-center gap-2.5">
                           <div className="rounded-xl bg-emerald-50 p-2 text-emerald-800 border border-emerald-100">
@@ -230,7 +236,7 @@ export default function SuperAdminDairiesPage() {
                           {d.status}
                         </span>
                       </td>
-                      <td className="p-4 text-right">
+                      <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                         {d.status === 'APPROVED' ? (
                           <button
                             disabled={busyId === d.id}
@@ -257,6 +263,30 @@ export default function SuperAdminDairiesPage() {
           </div>
         </div>
       </main>
+
+      <RecordDetailModal
+        open={Boolean(selectedDairy)}
+        onClose={() => setSelectedDairy(null)}
+        title="Dairy Business Details"
+        recordId={selectedDairy?.id}
+        recordCode={selectedDairy?.code}
+        recordType="Dairy"
+        status={selectedDairy?.status}
+        fields={
+          selectedDairy
+            ? [
+                { label: 'Dairy Name', value: selectedDairy.name },
+                { label: 'Code / Slug', value: `${selectedDairy.code} (/${selectedDairy.slug})` },
+                { label: 'Owner Name', value: selectedDairy.ownerName },
+                { label: 'Email', value: selectedDairy.email },
+                { label: 'Phone', value: selectedDairy.phone },
+                { label: 'City / State', value: [selectedDairy.city, selectedDairy.state].filter(Boolean).join(', ') },
+                { label: 'Plan', value: selectedDairy.currentSubscription?.planName },
+                { label: 'Farmers / Collections', value: `${selectedDairy.stats?.totalFarmers || 0} farmers · ${selectedDairy.stats?.totalCollections || 0} collections` },
+              ]
+            : []
+        }
+      />
     </div>
   );
 }

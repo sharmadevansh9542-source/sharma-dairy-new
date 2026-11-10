@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
+import { apiTenantUser } from '@/lib/auth/tenant';
+import { recordAdminEdit } from '@/lib/audit/edit-history';
 
 export const runtime = 'nodejs';
 
@@ -78,19 +79,21 @@ export async function PUT(request, { params }) {
           })),
         });
       }
-    });
 
-    await tenantAudit({
-      actorId: context.user.id,
-      dairyId: context.dairyId,
-      action: 'UPDATE_STAFF_PERMISSIONS',
-      entityType: 'User',
-      entityId: staffUser.id,
-      before: {
-        managerRole: staffUser.staffProfile?.managerRole,
-        permissions: staffUser.permissions.map((p) => p.permission.key),
-      },
-      after: { managerRole, permissions: filteredKeys },
+      await recordAdminEdit({
+        tx,
+        dairyId: context.dairyId,
+        recordType: 'User',
+        recordId: staffUser.id,
+        action: 'EDIT',
+        oldValues: {
+          managerRole: staffUser.staffProfile?.managerRole,
+          permissions: staffUser.permissions.map((p) => p.permission.key),
+        },
+        newValues: { managerRole, permissions: filteredKeys },
+        reason: body.reason?.trim() || 'Staff role and permissions updated by Admin',
+        performedBy: context.user,
+      });
     });
 
     return NextResponse.json({

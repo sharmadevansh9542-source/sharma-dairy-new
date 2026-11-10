@@ -11,6 +11,8 @@ import AdminSettingsManager from '@/components/admin-settings-manager';
 import AdminReportsView from '@/components/admin-reports-view';
 import AdminStockManager from '@/components/admin-stock-manager';
 import AdminAccountingView from '@/components/admin-accounting-view';
+import AdminMilkVerification from '@/components/admin-milk-verification';
+import AdminAuditView from '@/components/admin-audit-view';
 import { ensureDairyChartOfAccounts } from '@/lib/accounting/engine';
 
 const allowed = [
@@ -58,6 +60,7 @@ export default async function ModulePage({ params }) {
   }
 
   if (module === 'dashboard') redirect('/admin/dashboard');
+  if (module === 'milk-verification') return <AdminLayout active={module}><AdminMilkVerification /></AdminLayout>;
   if (module === 'rates') return <AdminLayout active={module}><RateManagement dairyId={dairyId} /></AdminLayout>;
   if (module === 'subscriptions') return <AdminLayout active={module}><SubscriptionsPanel dairyId={dairyId} /></AdminLayout>;
   if (module === 'products') return <AdminLayout active={module}><ProductsPanel dairyId={dairyId} /></AdminLayout>;
@@ -305,40 +308,38 @@ async function StaffPanel({ dairyId }) {
 }
 
 async function AuditPanel({ dairyId }) {
-  const rows = await prisma.auditLog.findMany({
-    where: { dairyId: dairyId || undefined },
-    take: 200,
-    orderBy: { createdAt: 'desc' },
-    include: { actor: { select: { fullName: true } } },
-  });
+  const [editHistory, rows] = await Promise.all([
+    prisma.adminEditHistory.findMany({
+      where: { dairyId: dairyId || undefined },
+      take: 200,
+      orderBy: { performedAt: 'desc' },
+    }),
+    prisma.auditLog.findMany({
+      where: { dairyId: dairyId || undefined },
+      take: 200,
+      orderBy: { createdAt: 'desc' },
+      include: { actor: { select: { fullName: true } } },
+    }),
+  ]);
 
-  return (
-    <div className="overflow-x-auto rounded-2xl border bg-white">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-left">
-          <tr>
-            <th className="p-3">Timestamp</th>
-            <th className="p-3">Actor</th>
-            <th className="p-3">Action</th>
-            <th className="p-3">Entity</th>
-            <th className="p-3">ID</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="border-t">
-              <td className="p-3">{r.createdAt.toLocaleString('en-IN')}</td>
-              <td className="p-3">{r.actor?.fullName || 'System'}</td>
-              <td className="p-3">{r.action}</td>
-              <td className="p-3">{r.entityType}</td>
-              <td className="p-3 font-mono text-xs">{r.entityId || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {!rows.length && <p className="p-6 text-slate-500">No audit events recorded yet for this dairy.</p>}
-    </div>
-  );
+  const serializedEdits = editHistory.map((e) => ({
+    ...e,
+    performedAt: e.performedAt.toISOString(),
+  }));
+
+  const serializedLogs = rows.map((r) => ({
+    id: r.id,
+    action: r.action,
+    entityType: r.entityType,
+    entityId: r.entityId,
+    actorName: r.actor?.fullName || 'System',
+    before: r.before,
+    after: r.after,
+    ipAddress: r.ipAddress,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
+  return <AdminAuditView editHistory={serializedEdits} auditLogs={serializedLogs} />;
 }
 
 async function SubscriptionsPanel({ dairyId }) {

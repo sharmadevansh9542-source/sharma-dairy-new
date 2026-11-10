@@ -16,6 +16,7 @@ import {
   Truck,
   Building,
   BookOpen,
+  ClipboardCheck,
 } from 'lucide-react';
 import { getTenantContext } from '@/lib/auth/tenant';
 import NotificationBell from '@/components/notification-bell';
@@ -26,6 +27,7 @@ const nav = [
   ['/admin/farmers', 'Farmers', Users],
   ['/admin/customers', 'Customers', UserRound],
   ['/admin/collections', 'Milk collection', Milk],
+  ['/admin/milk-verification', 'Milk Verification', ClipboardCheck],
   ['/admin/rates', 'Milk rates', Settings],
   ['/admin/subscriptions', 'Subscriptions & Routes', Truck],
   ['/admin/sales', 'Sales & billing', ShoppingCart],

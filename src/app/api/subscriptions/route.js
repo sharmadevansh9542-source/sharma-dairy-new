@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db/prisma';
 import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
+import { recordAdminEdit } from '@/lib/audit/edit-history';
 
 export const runtime = 'nodejs';
 
@@ -127,20 +128,40 @@ export async function PATCH(req) {
       updateData.dailyQuantity = Number(dailyQuantity);
     }
 
-    const updated = await prisma.milkSubscription.update({
-      where: { id: existing.id },
-      data: updateData,
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.milkSubscription.update({
+        where: { id: existing.id },
+        data: updateData,
+      });
+
+      if (context.role === 'ADMIN') {
+        await recordAdminEdit({
+          tx,
+          dairyId: context.dairyId,
+          recordType: 'MilkSubscription',
+          recordId: existing.id,
+          action: 'EDIT',
+          oldValues: { status: existing.status, dailyQuantity: Number(existing.dailyQuantity) },
+          newValues: { status: saved.status, dailyQuantity: Number(saved.dailyQuantity) },
+          reason: body.reason?.trim() || 'Milk subscription updated by Admin',
+          performedBy: context.user,
+        });
+      }
+
+      return saved;
     });
 
-    await tenantAudit({
-      actorId: context.user.id,
-      dairyId: context.dairyId,
-      action: 'UPDATE_MILK_SUBSCRIPTION',
-      entityType: 'MilkSubscription',
-      entityId: updated.id,
-      before: existing,
-      after: updated,
-    });
+    if (context.role !== 'ADMIN') {
+      await tenantAudit({
+        actorId: context.user.id,
+        dairyId: context.dairyId,
+        action: 'UPDATE_MILK_SUBSCRIPTION',
+        entityType: 'MilkSubscription',
+        entityId: updated.id,
+        before: existing,
+        after: updated,
+      });
+    }
 
     return NextResponse.json({ data: updated, message: 'Subscription updated.' });
   } catch (error) {

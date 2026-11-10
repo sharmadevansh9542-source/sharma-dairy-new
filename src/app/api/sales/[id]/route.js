@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { apiTenantUser, tenantAudit } from '@/lib/auth/tenant';
+import { recordAdminEdit } from '@/lib/audit/edit-history';
 
 export const runtime = 'nodejs';
 
@@ -75,18 +76,34 @@ export async function PATCH(req, { params }) {
         });
       }
 
+      if (context.role === 'ADMIN') {
+        await recordAdminEdit({
+          tx,
+          dairyId: context.dairyId,
+          recordType: 'Sale',
+          recordId: sale.id,
+          action: 'CANCEL',
+          oldValues: { status: sale.status, amount: Number(sale.amount) },
+          newValues: { status: 'CANCELLED', reason: reason || 'Cancelled by Admin' },
+          reason: reason?.trim() || 'Sale cancelled and reversed by Admin',
+          performedBy: context.user,
+        });
+      }
+
       return updated;
     });
 
-    await tenantAudit({
-      actorId: context.user.id,
-      dairyId: context.dairyId,
-      action: 'CANCEL_SALE',
-      entityType: 'Sale',
-      entityId: sale.id,
-      before: { status: sale.status },
-      after: { status: 'CANCELLED', reason },
-    });
+    if (context.role !== 'ADMIN') {
+      await tenantAudit({
+        actorId: context.user.id,
+        dairyId: context.dairyId,
+        action: 'CANCEL_SALE',
+        entityType: 'Sale',
+        entityId: sale.id,
+        before: { status: sale.status },
+        after: { status: 'CANCELLED', reason },
+      });
+    }
 
     return NextResponse.json({ data: cancelled, message: `Sale ${sale.saleCode} cancelled and stock/ledger reversed.` });
   } catch (e) {

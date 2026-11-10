@@ -100,6 +100,12 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+enum MilkEntryStatus {
+  PENDING_VERIFICATION
+  APPROVED
+  REJECTED
+}
+
 model Dairy {
   id           String      @id @default(cuid())
   name         String
@@ -147,6 +153,8 @@ model Dairy {
   notificationDeliveryLogs NotificationDeliveryLog[]
   accounts                 Account[]
   journalEntries           JournalEntry[]
+  milkEntries              MilkEntry[]
+  adminEditHistories       AdminEditHistory[]
 
   @@index([status, createdAt])
 }
@@ -307,6 +315,8 @@ model User {
   createdExpenses    Expense[]         @relation("ExpenseCreator")
   permissions        UserPermission[]
   staffInvitations   StaffInvitation[] @relation("StaffInviter")
+  verifiedMilkEntries MilkEntry[]      @relation("MilkEntryVerifier")
+  adminEditHistories AdminEditHistory[] @relation("AdminEditPerformer")
 
   @@index([dairyId, role])
 }
@@ -369,6 +379,7 @@ model FarmerProfile {
   collections   MilkCollection[]
   payments      FarmerPayment[]
   ledgerEntries LedgerEntry[]
+  milkEntries   MilkEntry[]
 
   @@index([dairyId, isActive])
   @@index([village, isActive])
@@ -397,6 +408,7 @@ model CustomerProfile {
   ledgerEntries     LedgerEntry[]
   milkSubscriptions MilkSubscription[]
   deliveries        DailyDelivery[]
+  milkEntries       MilkEntry[]
 
   @@index([dairyId, isActive])
   @@index([category, isActive])
@@ -939,4 +951,61 @@ model SystemSetting {
   value       Json
   updatedAt   DateTime @updatedAt
   updatedById String?
+}
+
+model MilkEntry {
+  id                  String          @id @default(cuid())
+  entryCode           String          @unique
+  dairyId             String
+  farmerId            String?
+  customerId          String?
+  submitterType       LedgerPartyType
+  entryDate           DateTime
+  session             Shift
+  milkType            MilkType
+  submittedQuantity   Decimal         @db.Decimal(12, 3)
+  currentQuantity     Decimal         @db.Decimal(12, 3)
+  fatPercent          Decimal?        @db.Decimal(5, 2)
+  snfPercent          Decimal?        @db.Decimal(5, 2)
+  remarks             String?
+  status              MilkEntryStatus @default(PENDING_VERIFICATION)
+  isEditedByAdmin     Boolean         @default(false)
+  submittedAt         DateTime        @default(now())
+  verifiedById        String?
+  verifiedAt          DateTime?
+  rejectionReason     String?
+  createdCollectionId String?
+  createdSaleId       String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  dairy      Dairy            @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  farmer     FarmerProfile?   @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  customer   CustomerProfile? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  verifiedBy User?            @relation("MilkEntryVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@index([dairyId, status, entryDate])
+  @@index([dairyId, isEditedByAdmin, entryDate])
+  @@index([farmerId, entryDate])
+  @@index([customerId, entryDate])
+}
+
+model AdminEditHistory {
+  id              String   @id @default(cuid())
+  dairyId         String
+  recordType      String
+  recordId        String
+  action          String
+  oldValues       Json?
+  newValues       Json?
+  reason          String
+  performedById   String
+  performedByName String
+  performedAt     DateTime @default(now())
+
+  dairy       Dairy @relation(fields: [dairyId], references: [id], onDelete: Cascade)
+  performedBy User  @relation("AdminEditPerformer", fields: [performedById], references: [id])
+
+  @@index([dairyId, recordType, recordId, performedAt])
+  @@index([dairyId, performedAt])
 }

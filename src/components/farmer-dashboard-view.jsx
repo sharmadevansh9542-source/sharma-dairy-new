@@ -24,9 +24,12 @@ import {
   Mail,
   MapPin,
   Download,
+  PlusCircle,
 } from 'lucide-react';
 import DigitalIdCard from '@/components/digital-id-card';
 import NotificationBell from '@/components/notification-bell';
+import MilkEntryPanel from '@/components/milk-entry-panel';
+import RecordDetailModal from '@/components/record-detail-modal';
 
 const formatMoney = (val) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(Number(val || 0));
@@ -40,6 +43,7 @@ export default function FarmerDashboardView({
   currentRate = null,
 }) {
   const [activeTab, setActiveTab] = useState('overview');
+  const [detailModal, setDetailModal] = useState(null);
 
   // Security tab state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -113,6 +117,7 @@ export default function FarmerDashboardView({
 
   const navItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'milk-entry', label: 'Add Milk Entry', icon: PlusCircle },
     { id: 'collections', label: 'Milk Collection History', icon: Milk },
     { id: 'payments', label: 'Payments & Ledger', icon: Wallet },
     { id: 'profile', label: 'Farmer Profile', icon: User },
@@ -327,7 +332,34 @@ export default function FarmerDashboardView({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {collections.slice(0, 5).map((col) => (
-                      <tr key={col.id} className="hover:bg-slate-50/80">
+                      <tr
+                        key={col.id}
+                        onClick={() =>
+                          setDetailModal({
+                            title: 'Verified Milk Collection',
+                            recordId: col.id,
+                            recordCode: col.collectionCode || col.id,
+                            recordType: 'MilkCollection',
+                            status: 'RECORDED',
+                            fields: [
+                              {
+                                label: 'Collection Date',
+                                value: new Date(col.collectionAt).toLocaleString('en-IN'),
+                              },
+                              { label: 'Shift', value: col.shift },
+                              { label: 'Milk Type', value: col.milkType?.label || 'Milk' },
+                              { label: 'Quantity', value: `${Number(col.quantityLitres).toFixed(2)} Litres`, highlight: true },
+                              { label: 'Fat %', value: col.fatPercent != null ? `${Number(col.fatPercent).toFixed(1)}%` : null },
+                              { label: 'SNF %', value: col.snfPercent != null ? `${Number(col.snfPercent).toFixed(1)}%` : null },
+                              { label: 'Rate / L', value: `₹${Number(col.ratePerLitre).toFixed(2)}` },
+                              { label: 'Total Amount', value: formatMoney(col.amount), highlight: true },
+                              { label: 'Notes', value: col.notes, fullWidth: true },
+                            ],
+                            auditMeta: { createdAt: col.createdAt || col.collectionAt },
+                          })
+                        }
+                        className="cursor-pointer hover:bg-slate-50/80"
+                      >
                         <td className="p-3 font-medium text-slate-800">
                           {new Date(col.collectionAt).toLocaleString('en-IN', {
                             dateStyle: 'medium',
@@ -368,7 +400,14 @@ export default function FarmerDashboardView({
                 </table>
               </div>
             </div>
+            {/* Daily Farmer Milk Entry Form & Submission History */}
+            <MilkEntryPanel roleLabel="Farmer" showQualityFields />
           </div>
+        )}
+
+        {/* DEDICATED MILK ENTRY TAB */}
+        {activeTab === 'milk-entry' && (
+          <MilkEntryPanel roleLabel="Farmer" showQualityFields />
         )}
 
         {/* TAB 2: MILK COLLECTIONS */}
@@ -402,7 +441,31 @@ export default function FarmerDashboardView({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {collections.map((col) => (
-                    <tr key={col.id} className="hover:bg-slate-50/80 transition">
+                    <tr
+                      key={col.id}
+                      onClick={() =>
+                        setDetailModal({
+                          title: 'Verified Milk Collection',
+                          recordId: col.id,
+                          recordCode: col.collectionCode || col.id,
+                          recordType: 'MilkCollection',
+                          status: 'RECORDED',
+                          fields: [
+                            { label: 'Collection Date', value: new Date(col.collectionAt).toLocaleString('en-IN') },
+                            { label: 'Shift', value: col.shift },
+                            { label: 'Milk Type', value: col.milkType?.label || 'Milk' },
+                            { label: 'Quantity', value: `${Number(col.quantityLitres).toFixed(2)} Litres`, highlight: true },
+                            { label: 'Fat %', value: col.fatPercent != null ? `${Number(col.fatPercent).toFixed(1)}%` : null },
+                            { label: 'SNF %', value: col.snfPercent != null ? `${Number(col.snfPercent).toFixed(1)}%` : null },
+                            { label: 'Rate / L', value: `₹${Number(col.ratePerLitre).toFixed(2)}` },
+                            { label: 'Total Amount', value: formatMoney(col.amount), highlight: true },
+                            { label: 'Notes', value: col.notes, fullWidth: true },
+                          ],
+                          auditMeta: { createdAt: col.createdAt || col.collectionAt },
+                        })
+                      }
+                      className="cursor-pointer hover:bg-slate-50/80 transition"
+                    >
                       <td className="p-3.5 font-mono text-xs text-slate-500">{col.collectionCode || col.id.slice(0, 8)}</td>
                       <td className="p-3.5 font-medium text-slate-800">
                         {new Date(col.collectionAt).toLocaleString('en-IN', {
@@ -468,7 +531,28 @@ export default function FarmerDashboardView({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {payments.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50/80 transition">
+                      <tr
+                        key={p.id}
+                        onClick={() =>
+                          setDetailModal({
+                            title: 'Farmer Payout Receipt',
+                            recordId: p.id,
+                            recordCode: p.paymentCode || p.id,
+                            recordType: 'FarmerPayment',
+                            status: 'COMPLETED',
+                            fields: [
+                              { label: 'Payment Code', value: p.paymentCode },
+                              { label: 'Paid Date', value: new Date(p.paidAt).toLocaleString('en-IN') },
+                              { label: 'Method', value: p.method },
+                              { label: 'Amount Paid', value: formatMoney(p.amount), highlight: true },
+                              { label: 'Reference', value: p.reference },
+                              { label: 'Notes', value: p.notes, fullWidth: true },
+                            ],
+                            auditMeta: { createdAt: p.paidAt },
+                          })
+                        }
+                        className="cursor-pointer hover:bg-slate-50/80 transition"
+                      >
                         <td className="p-3.5 font-mono text-xs font-semibold text-slate-700">
                           {p.paymentCode}
                         </td>
@@ -652,6 +736,19 @@ export default function FarmerDashboardView({
           </div>
         )}
       </main>
+
+      <RecordDetailModal
+        open={Boolean(detailModal)}
+        onClose={() => setDetailModal(null)}
+        title={detailModal?.title}
+        recordId={detailModal?.recordId}
+        recordCode={detailModal?.recordCode}
+        recordType={detailModal?.recordType}
+        status={detailModal?.status}
+        fields={detailModal?.fields || []}
+        auditMeta={detailModal?.auditMeta}
+        fetchAuditHistory={false}
+      />
     </div>
   );
 }
