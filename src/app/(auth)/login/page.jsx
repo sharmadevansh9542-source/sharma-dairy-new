@@ -64,9 +64,9 @@ function LoginForm() {
       if (!response.ok) throw new Error(data.error || 'Login failed.');
 
       // Redirect strictly based on the server-authenticated database role
+      // Full browser navigation ensures Set-Cookie is committed cleanly across mobile browsers & Vercel edge
       const dest = data.redirectUrl || (data.user.role === 'ADMIN' ? '/admin/dashboard' : '/dashboard');
-      router.push(dest);
-      router.refresh();
+      window.location.assign(dest);
     } catch (err) {
       setError(err.message || 'Unable to sign in.');
     } finally {
@@ -152,6 +152,9 @@ function LoginForm() {
                 <input
                   type="text"
                   autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   required
                   placeholder="e.g. 9876543210 or user@example.com"
                   value={identifier}

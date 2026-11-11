@@ -36,12 +36,17 @@ export async function POST(request) {
 
     const identifier = parsed.data.identifier.trim();
     const isEmail = identifier.includes('@');
-    const normalizedIdentifier = isEmail ? identifier.toLowerCase() : identifier.replace(/[^0-9]/g, '');
+    const digitsOnly = identifier.replace(/[^0-9]/g, '');
+    const phoneCandidates = Array.from(
+      new Set(
+        [digitsOnly, digitsOnly.length > 10 ? digitsOnly.slice(-10) : ''].filter(Boolean)
+      )
+    );
 
     const user = await prisma.user.findFirst({
       where: isEmail
-        ? { email: normalizedIdentifier }
-        : { phone: normalizedIdentifier },
+        ? { email: identifier.toLowerCase() }
+        : { phone: { in: phoneCandidates } },
       include: {
         dairy: true,
         memberships: {
@@ -94,17 +99,22 @@ export async function POST(request) {
 
     const sessionDays = body?.rememberMe ? 30 : 7;
     await createSession(user.id, sessionDays);
-    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-    await prisma.auditLog.create({
-      data: {
-        actorId: user.id,
-        dairyId: activeDairy?.id || undefined,
-        action: 'LOGIN',
-        entityType: 'User',
-        entityId: user.id,
-        ipAddress: ip,
-      },
-    });
+
+    try {
+      await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+      await prisma.auditLog.create({
+        data: {
+          actorId: user.id,
+          dairyId: activeDairy?.id || undefined,
+          action: 'LOGIN',
+          entityType: 'User',
+          entityId: user.id,
+          ipAddress: ip,
+        },
+      });
+    } catch (logErr) {
+      console.warn('Non-fatal login metadata update failed:', logErr?.message);
+    }
 
     return NextResponse.json({
       user: {
@@ -120,6 +130,36 @@ export async function POST(request) {
     });
   } catch (error) {
     console.error('Login error:', error);
-    return NextResponse.json({ error: 'Unable to sign in right now. Please try again.' }, { status: 500 });
+    const code = error?.code || '';
+    const msg = String(error?.message || '');
+
+    if (code === 'P2021' || code === 'P2022' || /does not exist/i.test(msg)) {
+      return NextResponse.json(
+        {
+          error:
+            'Database schema is not initialized on this server. Apply Prisma migrations (prisma migrate deploy) on your cloud PostgreSQL database.',
+        },
+        { status: 503 }
+      );
+    }
+    if (
+      code === 'P1000' ||
+      code === 'P1001' ||
+      code === 'P1002' ||
+      /Can't reach database server|Authentication failed|ECONNREFUSED|localhost:5433/i.test(msg)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Cannot connect to PostgreSQL database. Verify Vercel DATABASE_URL environment variable uses a live cloud PostgreSQL connection string (not localhost).',
+        },
+        { status: 503 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: 'Unable to sign in right now. Please try again.' },
+      { status: 500 }
+    );
   }
 }
