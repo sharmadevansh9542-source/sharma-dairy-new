@@ -3,14 +3,39 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 
 function deriveMigrationUrl(dbUrl) {
-  if (process.env.DIRECT_URL) return process.env.DIRECT_URL;
-  if (dbUrl.includes('-pooler.')) {
-    const direct = dbUrl.replace('-pooler.', '.');
-    return direct.includes('connect_timeout=')
-      ? direct
-      : `${direct}${direct.includes('?') ? '&' : '?'}connect_timeout=30`;
+  let target = process.env.DIRECT_URL || dbUrl;
+  if (!process.env.DIRECT_URL && target.includes('-pooler.')) {
+    target = target.replace('-pooler.', '.');
   }
-  return dbUrl;
+  try {
+    const parsed = new URL(target);
+    parsed.searchParams.delete('channel_binding');
+    parsed.searchParams.delete('pgbouncer');
+    if (!parsed.searchParams.has('connect_timeout')) {
+      parsed.searchParams.set('connect_timeout', '30');
+    }
+    return parsed.toString();
+  } catch {
+    return target;
+  }
+}
+
+function normalizeRuntimeUrl(dbUrl) {
+  try {
+    const parsed = new URL(dbUrl);
+    parsed.searchParams.delete('channel_binding');
+    if (parsed.hostname.includes('-pooler.') && !parsed.searchParams.has('pgbouncer')) {
+      parsed.searchParams.set('pgbouncer', 'true');
+    }
+    if (parsed.hostname.includes('neon.tech')) {
+      if (!parsed.searchParams.has('connect_timeout')) parsed.searchParams.set('connect_timeout', '30');
+      if (!parsed.searchParams.has('pool_timeout')) parsed.searchParams.set('pool_timeout', '30');
+      if (!parsed.searchParams.has('connection_limit')) parsed.searchParams.set('connection_limit', '5');
+    }
+    return parsed.toString();
+  } catch {
+    return dbUrl;
+  }
 }
 
 function run(cmd, extraEnv = {}) {
@@ -29,7 +54,8 @@ async function main() {
     const migrationUrl = deriveMigrationUrl(dbUrl);
     run('npx prisma migrate deploy', { DATABASE_URL: migrationUrl });
 
-    const prisma = new PrismaClient();
+    const runtimeUrl = normalizeRuntimeUrl(dbUrl);
+    const prisma = new PrismaClient({ datasources: { db: { url: runtimeUrl } } });
     try {
       await prisma.milkTypeConfig.createMany({
         data: [
